@@ -1,0 +1,664 @@
+  LLM check: Claude (claude-sonnet-4-6) connected
+  Batch root: data/repeated/factory_claude-sonnet-4-6_optanchor_analytical   (commit 6affd772d35edf06fb8af3ff33f0638fc7d49bb5, prompts 2c7b5ca637c9)
+
+======================================================================
+  RUN 05 / 9   (factory, LLM)
+======================================================================
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+2026-09-07 10:20:19,890 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H1; adding it back
+2026-09-07 10:20:19,890 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H2; adding it back
+2026-09-07 10:20:19,890 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H3; adding it back
+2026-09-07 10:20:19,890 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FactoryNoise; adding it back
+2026-09-07 10:20:19,890 cbpa.runner.factory_experiment [WARNING] LLM contract omitted typed assumption(s) ['factory_demand_uph', 'cellA_demand_uph', 'cellB_demand_uph', 'h2_availability', 'supply_vc_available', 'agv_transfer_time_s']; re-inserted from the plant model
+  [L1] Contract C1_factory elicited:
+    KPIs:        total_factory_throughput, product_quality_rate, routing_efficiency
+    Constraints: operator_fatigue_per_individual <= 0.4, combined_noise_level <= 80.0, variant_V_A_minimum_production >= 1.0, variant_V_B_minimum_production >= 1.0, variant_V_C_minimum_production >= 1.0, FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0
+    Ambiguities: 5 resolved
+
+  [L2] Generated 11 candidates, Pareto selected FS1opt_det
+  [L3] Verification: feasible=True | P(feasible)=100%
+    Margins: {'FatigueIndex_H1': 0.0195, 'FatigueIndex_H2': 0.0145, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 1.5}
+  [L4] Guards armed: 4 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.5 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+2026-09-07 10:22:33,488 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'MaxThroughput-RobotPush'
+  [L2] Generated 10 aggressive replan candidates
+    Pareto front: [MaxThroughput-RobotPush, NoiseBounded-HumanCompensated, V_C-R2Boosted-Balanced, FS2d_det, FS2e_det]
+2026-09-07 10:22:33,488 cbpa.runner.factory_experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries MaxThroughput-RobotPush forward flagged
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 1.0 violates <= 0.4
+    Violation: FatigueIndex_H3: 0.744 violates <= 0.4
+    Violation: FactoryNoise: 87.3 violates <= 82.0
+    Margins: {'FatigueIndex_H1': -0.6, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': -0.344, 'FactoryNoise': -5.3}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] The factory schedule for this shift cannot be executed as planned following a 20% demand increase. Three constraints are violated simultaneously: Operator H1's fatigue index has reached 1.0 (limit: 0.40, margin: −0.60), Operator H3's fatigue index stands at 0.744 (limit: 0.40, margin: −0.344), and combined factory noise is 87.3 dB (limit: 82.0 dB, margin: −5.3 dB). Operator H2 is underutilized with 0.35 units of fatigue headroom remaining. H3's certification restricts her to inspection tasks only, limiting rebalancing options across task types. Immediate intervention is required before production can resume.
+
+  [Escalation] 5 remediation options:
+    - Option 1 – Cross-Cell Workload Redistribution: Reassign H1's non-inspection assembly tasks from Cell-1 to H2 in Cell-2, exploiting H2's full 0.35 fatigue headroom. Reroute the highest-noise product variant from Cell-1 to Cell-2 where its contribution to combined factory noise is lower. Throttle Cell-1 to single-machine operation to reduce its noise contribution by an estimated 4–6 dB, bringing factory total to approximately 81–82 dB. H3 continues inspection at a reduced pace consistent with a ≤0.40 fatigue target (approximately 46% of current assignment volume). This option requires no additional personnel and no constraint waivers.
+      Preserves human constraints: Yes | Gap: ~8.0%
+    - Option 2 – Deploy Backup / Overtime Operators: Authorize overtime for one certified assembly backup operator (B1) to relieve H1 and a certified inspection backup (B2) to share H3's inspection queue. B1 absorbs enough of H1's workload to bring H1's fatigue index to ≤0.40; B2 absorbs the portion of H3's inspection volume that exceeds her 0.40 limit. Noise violation must be addressed concurrently via speed reduction on Cell-1's highest-noise machine (estimated −3 dB from throttling, −2.3 dB from reduced concurrent operation), reaching approximately 82 dB. Full demand can be met within the shift at overtime cost. Certifications for B1 and B2 must be confirmed before deployment.
+      Preserves human constraints: Yes | Gap: ~0.0%
+    - Option 3 – Drop High-Impact Variant from This Shift: Remove the product variant with the highest combined fatigue-and-noise footprint from the current shift and defer it to the next available slot. This variant is the primary driver of both H1 overload and the noise exceedance. Dropping it reduces factory noise to an estimated 80–81 dB (within the 82 dB ceiling), lowers H1's fatigue index to approximately 0.38, and lowers H3's fatigue index to approximately 0.32. H2 handles remaining variants up to its 0.35 limit. The deferred variant creates a production backlog requiring planning escalation for rescheduling in the next shift or on overtime.
+      Preserves human constraints: Yes | Gap: ~15.0%
+    - Option 4 – Accept Throughput Reduction to Constraint-Safe Rate: Reduce the production rate across both cells to the maximum level at which all three violated constraints are simultaneously satisfied. H1's fatigue at 1.0 represents a 150% overrun of its 0.40 limit; a task rate reduction of approximately 55% on H1's assignments and 47% on H3's, combined with sequencing machines to avoid concurrent peak-noise operation, brings all constraints within bounds. H2 absorbs redistributed tasks up to its 0.35 limit. No additional resources or waivers are needed, but the significant deadline gap must be escalated immediately to production planning for rescheduling or customer communication.
+      Preserves human constraints: Yes | Gap: ~25.0%
+    - Option 5 – Temporary Constraint Relaxation (Last Resort, EHS Authorization Required): Request a time-limited waiver to raise H1's fatigue limit to 0.65, H3's fatigue limit to 0.50, and the factory noise ceiling to 85 dB for the duration of this shift only. This allows the full 20%-increased demand to be fulfilled without throughput loss or additional personnel, but materially compromises the human-centric and safety design principles of the CBPA framework. A waiver at this level for H1 implies a 63% increase over the ergonomic design threshold and requires plant manager or EHS director sign-off. Mandatory recovery time must be scheduled for H1 and H3 in the following shift. Noise exposure at 85 dB for a full shift requires enforced hearing-protection use and audiometric follow-up per occupational health regulation. This option should only be selected when all other options are operationally infeasible.
+      Preserves human constraints: No | Gap: ~0.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 11 balanced FS3 candidates
+    Pareto front: [Noise-Floor Silent Mode, FS3b_det, FS3d_det, FS3e_det, FS3opt_det]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=85.3 uph | Noise=81.1 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 85.3 uph (target was 100.0; gap 14.7 uph)
+    Noise: 81.1 dB | Fatigue: {'H1': 0.3744, 'H2': 0.0, 'H3': 0.38}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 11 next-shift candidates (FS4)
+    Pareto front: [FS4b_det, FS4d_det, FS4opt_det]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=100%
+  [L4] FS4 pre-staged with 4 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=85.3 uph | Noise=81.1 dB
+  [run 05] ok in 485.4s; LLM calls=7 exceptions=0 empty=0 schema_invalid=0 fallbacks=0 llm_warnings={'contract_repair': 10}
+
+======================================================================
+  RUN 06 / 9   (factory, LLM)
+======================================================================
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+2026-09-07 10:28:19,954 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H1; adding it back
+2026-09-07 10:28:19,954 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H2; adding it back
+2026-09-07 10:28:19,954 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H3; adding it back
+2026-09-07 10:28:19,954 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FactoryNoise; adding it back
+2026-09-07 10:28:19,954 cbpa.runner.factory_experiment [WARNING] LLM contract omitted typed assumption(s) ['factory_demand_uph', 'cellA_demand_uph', 'cellB_demand_uph', 'h2_availability', 'supply_vc_available', 'agv_transfer_time_s']; re-inserted from the plant model
+  [L1] Contract C1_factory elicited:
+    KPIs:        total_factory_throughput, product_quality_rate, variant_routing_efficiency
+    Constraints: operator_fatigue_per_individual <= 0.4, combined_noise_level <= 80.0, product_quality_floor >= 0.99, variant_V_A_minimum_production >= 1.0, variant_V_B_minimum_production >= 1.0, variant_V_C_minimum_production >= 1.0, FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0
+    Ambiguities: 5 resolved
+
+  [L2] Generated 11 candidates, Pareto selected FS1opt_det
+  [L3] Verification: feasible=True | P(feasible)=100%
+    Margins: {'FatigueIndex_H1': 0.0195, 'FatigueIndex_H2': 0.0145, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 1.5}
+  [L4] Guards armed: 4 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.5 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+2026-09-07 10:30:05,122 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'Max-Throughput Robot-Led'
+  [L2] Generated 10 aggressive replan candidates
+    Pareto front: [Max-Throughput Robot-Led, Balanced High-Performance, Cell-A-Heavy, Cell-B-Conservative, Noise-Managed Speed Push, FS2d_det, FS2e_det]
+2026-09-07 10:30:05,122 cbpa.runner.factory_experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries Max-Throughput Robot-Led forward flagged
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 0.9457 violates <= 0.4
+    Violation: FatigueIndex_H3: 0.729 violates <= 0.4
+    Violation: FactoryNoise: 88.5 violates <= 82.0
+    Margins: {'FatigueIndex_H1': -0.5457, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': -0.329, 'FactoryNoise': -6.5}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] A 20% demand surge has produced three simultaneous constraint violations that prevent the current factory-level schedule from being accepted. Operator H1's fatigue index (0.9457) exceeds the personal limit of 0.40 by a margin of −0.5457, operator H3's fatigue index (0.729) exceeds the limit of 0.40 by −0.329, and combined factory noise has reached 88.5 dB against a ceiling of 82.0 dB, an excess of 6.5 dB. H2 retains a positive fatigue margin of 0.35 and is the only operator currently below threshold. H3's certification restricts her assignments to inspection tasks only, limiting her ability to absorb additional work from H1. The factory cannot fulfil the elevated demand within current human-centric and acoustic safety constraints without management intervention.
+
+  [Escalation] 5 remediation options:
+    - Option 1 – Cross-cell workload redistribution to leverage H2's spare capacity: Reroute the most labour-intensive product variants currently processed in Cell_1 to Cell_2, and reassign H1's excess task queue to H2, who holds a fatigue margin of +0.35. Stagger peak-noise operations across the two cells so they do not run simultaneously at full power, reducing combined acoustic output to approximately 81–82 dB. H3 remains on inspection duties; no certification constraint is violated. This redistribution is projected to bring H1's fatigue index to approximately 0.38 and H2's to approximately 0.30, both within limits. A small throughput efficiency loss (~5%) is expected from routing overhead and staggered scheduling windows.
+      Preserves human constraints: Yes | Gap: ~5.0%
+    - Option 2 – Deploy a certified backup operator to share H1's workload: Bring a backup operator (B1) with full production certification on-shift to directly split H1's task queue at approximately a 50/50 load share. H1's fatigue index is projected to fall from 0.9457 to approximately 0.38–0.40. H3 continues inspection-only. To address the noise violation, pair backup deployment with staggered cell scheduling: reduce Cell_2's throughput rate by 10–15% during Cell_1 peak windows to trim combined noise from 88.5 dB to approximately 81 dB. No fatigue limit is breached and no certification rule is violated. Net throughput loss is small (~3%) and is mainly due to the staggered noise-reduction scheduling.
+      Preserves human constraints: Yes | Gap: ~3.0%
+    - Option 3 – Product mix adjustment: suspend the noisiest / highest-fatigue variant this shift: Identify and remove from this shift's schedule the single product variant that contributes most to both H1 fatigue loading and factory noise (typically a complex machining or full-assembly variant). Dropping that variant is projected to reduce H1's fatigue index to approximately 0.40, H3's to approximately 0.38, and combined factory noise to approximately 81.5 dB, restoring feasibility across all three violated constraints simultaneously. H3's certification constraint is unaffected. The suspended variant is deferred to the next shift or split across two future windows. This option trades a 12% throughput gap this shift for guaranteed constraint compliance with zero operator risk.
+      Preserves human constraints: Yes | Gap: ~12.0%
+    - Option 4 – Proportional throughput reduction across both cells: Scale back the overall production rate across both cells uniformly until all three violated constraints return to feasibility without any operator or routing changes. A reduction of approximately 33% from the elevated demand level (relative to the original plan) is estimated to bring H1 fatigue to approximately 0.39, H3 fatigue to approximately 0.36, and combined noise to approximately 81 dB. This is the most conservative option: it requires no operator changes, no variant removal, and no constraint relaxation, but accepts a significant deadline gap and captures none of the 20% demand increase this shift. It may be appropriate when operator availability and product mix cannot be adjusted on short notice.
+      Preserves human constraints: Yes | Gap: ~33.0%
+    - Option 5 – Temporary constraint relaxation with enhanced PPE and documented management sign-off: With explicit production manager approval and a documented risk-acceptance record, temporarily raise the H1 fatigue ceiling to 0.65, the H3 fatigue ceiling to 0.50, and the acoustic limit to 86 dB. The higher acoustic limit must be paired with mandatory Class-A hearing-protection equipment for all operators in both cells throughout the shift. Under these relaxed thresholds the full 20% demand surge can be fulfilled in one shift with zero throughput loss. IMPORTANT: this option does NOT preserve human-centric constraints as defined in the CBPA framework. It requires written authorisation from the production manager and the health-and-safety officer, must be logged as a regulatory deviation, and must not be applied on consecutive shifts without an intervening recovery period. H3's inspection-only certification constraint remains fully unchanged and must not be relaxed under any circumstances.
+      Preserves human constraints: No | Gap: ~0.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 11 balanced FS3 candidates
+    Pareto front: [Ultra-Conservative Noise Floor, FS3b_det, FS3d_det, FS3e_det, FS3opt_det]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=85.3 uph | Noise=81.1 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 85.3 uph (target was 100.0; gap 14.7 uph)
+    Noise: 81.1 dB | Fatigue: {'H1': 0.3744, 'H2': 0.0, 'H3': 0.38}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 11 next-shift candidates (FS4)
+    Pareto front: [H3-Fatigue-Shield-Ultra-Conservative, FS4b_det, FS4d_det, FS4opt_det]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=100%
+  [L4] FS4 pre-staged with 4 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=85.3 uph | Noise=81.1 dB
+  [run 06] ok in 477.3s; LLM calls=7 exceptions=0 empty=0 schema_invalid=0 fallbacks=0 llm_warnings={'contract_repair': 10}
+
+======================================================================
+  RUN 07 / 9   (factory, LLM)
+======================================================================
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+2026-09-07 10:36:36,669 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H1; adding it back
+2026-09-07 10:36:36,669 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H2; adding it back
+2026-09-07 10:36:36,669 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H3; adding it back
+2026-09-07 10:36:36,669 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FactoryNoise; adding it back
+2026-09-07 10:36:36,669 cbpa.runner.factory_experiment [WARNING] LLM contract omitted typed assumption(s) ['factory_demand_uph', 'cellA_demand_uph', 'cellB_demand_uph', 'h2_availability', 'supply_vc_available', 'agv_transfer_time_s']; re-inserted from the plant model
+  [L1] Contract C1_factory elicited:
+    KPIs:        total_factory_throughput, product_quality_rate, operator_fatigue_per_individual, combined_noise_level
+    Constraints: operator_fatigue_per_individual <= 0.4, combined_noise_level <= 80.0, product_quality_rate >= 99.0, variant_coverage_V_A >= 1.0, variant_coverage_V_B >= 1.0, variant_coverage_V_C >= 1.0, FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0
+    Ambiguities: 5 resolved
+
+  [L2] Generated 11 candidates, Pareto selected FS1opt_det
+  [L3] Verification: feasible=True | P(feasible)=100%
+    Margins: {'FatigueIndex_H1': 0.0195, 'FatigueIndex_H2': 0.0145, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 1.5}
+  [L4] Guards armed: 4 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.5 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+2026-09-07 10:38:51,026 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'C1_MaxRobotPush'
+  [L2] Generated 10 aggressive replan candidates
+    Pareto front: [C1_MaxRobotPush, C5_BalancedIncrementalSurge, FS2d_det, FS2e_det]
+2026-09-07 10:38:51,027 cbpa.runner.factory_experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries C1_MaxRobotPush forward flagged
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 0.7134 violates <= 0.4
+    Violation: FatigueIndex_H3: 0.5227 violates <= 0.4
+    Violation: FactoryNoise: 86.4 violates <= 82.0
+    Margins: {'FatigueIndex_H1': -0.3134, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': -0.1227, 'FactoryNoise': -4.4}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] The factory-level schedule has been rejected due to three simultaneous constraint violations triggered by a 20% demand surge. Operator H1 is critically over-fatigued (FatigueIndex 0.7134 vs limit 0.4, a 78% overage), operator H3 is moderately over-fatigued (FatigueIndex 0.5227 vs limit 0.4, a 31% overage), and combined factory noise has breached the 82 dB ceiling at 86.4 dB (4.4 dB overage). Operator H2 retains significant fatigue headroom (margin +0.35). The certification constraint on H3 (inspection only) restricts load-balancing options. The current schedule is infeasible and requires explicit production manager authorization before any option is enacted.
+
+  [Escalation] 5 remediation options:
+    - Option 1 (Recommended): Cross-Cell Workload Redistribution to H2: Reassign H1's excess production tasks to H2, who has a fatigue margin of +0.35 and can absorb approximately 30% additional load. Simultaneously re-route noise-intensive variants from Cell-1 to Cell-2 or stagger their execution to keep combined noise at or below 82 dB. H3 remains on inspection duties only, consistent with certification constraints. This option requires a revised scheduling pass but does not change headcount or demand commitments.
+      Preserves human constraints: Yes | Gap: ~2.0%
+    - Option 2: Deploy Backup Operator to Relieve H1: Bring in a certified backup operator (B1) to share H1's workload during the demand surge period. B1 takes on the high-load tasks that are driving H1's fatigue index to 0.7134. If B1 is also certified for noise-intensive operations, some AGV routing can be redistributed to lower peak simultaneous noise. H3 continues inspection-only duties. This option fully satisfies all human-centric constraints and meets most of the demand increase, but incurs overtime cost.
+      Preserves human constraints: Yes | Gap: ~1.0%
+    - Option 3: Product Mix Adjustment — Defer One High-Load Variant: Identify the single variant responsible for the greatest marginal contribution to both H1 fatigue and factory noise, and defer it to the next shift or a planned overtime window. Removing even one high-intensity variant can reduce H1's fatigue index by an estimated 0.15–0.20 and lower combined noise by 2–3 dB, bringing all three metrics into compliance. H3's inspection queue shrinks proportionally. This option partially fulfills the 20% demand increase, creating a small deadline gap for the deferred variant.
+      Preserves human constraints: Yes | Gap: ~10.0%
+    - Option 4: Throughput Reduction — Accept Deadline Gap: Reduce production pace across both cells to bring H1 fatigue, H3 fatigue, and factory noise within limits simultaneously. A pace reduction of approximately 15% from the surge target (i.e., accepting ~5% above the original schedule rate rather than 20%) is estimated to bring all three metrics into compliance: H1 fatigue returns near 0.4, H3 near 0.36, and noise near 81.5 dB. All human-centric and safety constraints are preserved. The production manager must formally accept a deadline shortfall for the demand increase portion.
+      Preserves human constraints: Yes | Gap: ~15.0%
+    - Option 5 (Last Resort): Temporary Constraint Relaxation with Medical and Safety Sign-Off: With explicit sign-off from the occupational health officer and safety manager, temporarily raise H1's fatigue limit to 0.75 (current level) and H3's to 0.55 for the duration of this shift only, while requiring mandatory rest in the following shift. Simultaneously apply engineering noise controls (temporary barriers or AGV speed reduction) to reduce factory noise from 86.4 dB to at most 85 dB, which is below the OSHA 8-hour TWA action level with PPE. This option does NOT preserve human-centric constraints as defined in the CBPA framework and requires documented managerial override. It should only be used if Options 1–4 are collectively insufficient to meet a critical customer commitment.
+      Preserves human constraints: No | Gap: ~0.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 11 balanced FS3 candidates
+    Pareto front: [FS3b_det, FS3d_det, FS3e_det, FS3opt_det]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=85.3 uph | Noise=81.1 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 85.3 uph (target was 100.0; gap 14.7 uph)
+    Noise: 81.1 dB | Fatigue: {'H1': 0.3744, 'H2': 0.0, 'H3': 0.38}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 11 next-shift candidates (FS4)
+    Pareto front: [FS4b_det, FS4d_det, FS4opt_det]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=100%
+  [L4] FS4 pre-staged with 4 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=85.3 uph | Noise=81.1 dB
+  [run 07] ok in 518.4s; LLM calls=7 exceptions=0 empty=0 schema_invalid=0 fallbacks=0 llm_warnings={'contract_repair': 10}
+
+======================================================================
+  RUN 08 / 9   (factory, LLM)
+======================================================================
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+2026-09-07 10:44:54,164 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H1; adding it back
+2026-09-07 10:44:54,164 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H2; adding it back
+2026-09-07 10:44:54,164 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H3; adding it back
+2026-09-07 10:44:54,164 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FactoryNoise; adding it back
+2026-09-07 10:44:54,164 cbpa.runner.factory_experiment [WARNING] LLM contract omitted typed assumption(s) ['factory_demand_uph', 'cellA_demand_uph', 'cellB_demand_uph', 'h2_availability', 'supply_vc_available', 'agv_transfer_time_s']; re-inserted from the plant model
+  [L1] Contract C1_factory elicited:
+    KPIs:        total_throughput, product_quality, routing_efficiency
+    Constraints: operator_fatigue_per_individual <= 0.4, combined_noise_level <= 80.0, product_quality_floor >= 0.99, variant_V_A_min_production >= 1.0, variant_V_B_min_production >= 1.0, variant_V_C_min_production >= 1.0, FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0
+    Ambiguities: 5 resolved
+
+  [L2] Generated 11 candidates, Pareto selected FS1opt_det
+  [L3] Verification: feasible=True | P(feasible)=100%
+    Margins: {'FatigueIndex_H1': 0.0195, 'FatigueIndex_H2': 0.0145, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 1.5}
+  [L4] Guards armed: 4 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.5 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+2026-09-07 10:46:48,546 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'Surge-Max-Robotic'
+  [L2] Generated 10 aggressive replan candidates
+    Pareto front: [Surge-Max-Robotic, Noise-Constrained Surge, FS2d_det, FS2e_det]
+2026-09-07 10:46:48,546 cbpa.runner.factory_experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries Surge-Max-Robotic forward flagged
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 0.7367 violates <= 0.4
+    Violation: FatigueIndex_H3: 0.5062 violates <= 0.4
+    Violation: FactoryNoise: 86.5 violates <= 82.0
+    Margins: {'FatigueIndex_H1': -0.3367, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': -0.1062, 'FactoryNoise': -4.5}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] A 20% demand surge has pushed the two-cell factory schedule into three simultaneous violations: H1 fatigue index is 84% over limit (0.737 vs 0.40), H3 fatigue index is 27% over limit (0.506 vs 0.40), and combined factory noise is 4.5 dB over the 82 dB ceiling (86.5 dB actual). H2 retains 0.35 margin headroom and is the only unconstrained human resource. H3's certification restricts them to inspection tasks only, limiting rebalancing options. These three violations collectively block schedule acceptance. Immediate escalation and managerial decision are required before shift start.
+
+  [Escalation] 5 remediation options:
+    - Option 1 (Recommended): Cross-Cell Workload Redistribution to H2: Rebalance direct-work task assignments by shifting the highest-load tasks currently assigned to H1 onto H2, who holds 0.35 fatigue margin (estimated capacity to absorb ~0.33 additional fatigue units). Reroute mid-complexity variants in Cell-1 through Cell-2 where H2 is active. Stagger machine duty cycles across both cells using time-offset scheduling to bring combined noise below 82 dB by reducing simultaneous peak operation. H3 remains on inspection only (certification preserved). This approach targets all three violations without sacrificing throughput or relaxing human-centric constraints.
+      Preserves human constraints: Yes | Gap: ~8.0%
+    - Option 2: Deploy Backup Operator to Supplement H1: Request an overtime or on-call backup operator (H4 or equivalent, certified for direct work) to assume approximately 47% of H1's current task load, which is the minimum required to bring H1 from 0.737 to at or below 0.40. Independently address the 4.5 dB noise violation by shifting the two highest-duty-cycle machines in Cell-1 to staggered operation windows, reducing simultaneous acoustic output. H3 remains on inspection. This option fully preserves all human-centric constraints and achieves near-full throughput but incurs overtime labor cost and requires backup operator availability.
+      Preserves human constraints: Yes | Gap: ~4.0%
+    - Option 3: Product Mix Adjustment — Drop Highest-Load Variant This Shift: Identify and defer production of the single variant with the highest combined fatigue-and-noise footprint (typically the most machine-intensive or manually intensive part type). Removing this variant is estimated to reduce H1 fatigue by 0.25–0.35 units and lower combined noise by 3–5 dB, directly targeting all three violations. The deferred variant is rescheduled to the next shift or a low-utilization window. This option fully preserves human-centric constraints but creates a partial demand shortfall for the deferred variant. Suitable when the high-load variant has schedule flexibility or buffer stock exists.
+      Preserves human constraints: Yes | Gap: ~15.0%
+    - Option 4: Planned Throughput Reduction — Revert to Pre-Surge Demand Level: Accept that the 20% demand increase cannot be fulfilled this shift within current human-centric and safety constraints. Scale production back to approximately 83% of the elevated target (equivalent to 100% of baseline demand) by reducing task release rate uniformly across both cells. This brings H1 fatigue to approximately 0.61 (still above limit) — further reduction to ~70% of surge target brings all indices into compliance. Combined noise drops proportionally with machine duty cycle reduction. This is the safest option operationally and the least complex to execute, but creates the largest deadline gap against the 20% demand surge.
+      Preserves human constraints: Yes | Gap: ~20.0%
+    - Option 5 (Least Preferred): Temporary Fatigue Constraint Relaxation with Noise Mitigation: Escalate to safety officer and production manager for a time-limited, documented exception to raise H1 fatigue threshold to 0.75 (covering the 0.737 observed value) and H3 fatigue threshold to 0.52 for this shift only. The noise violation of 4.5 dB must still be addressed independently — this can be partially mitigated by requiring PPE (hearing protection) for all operators above 85 dB and staggering the two loudest machines. This option does NOT preserve human-centric constraints as defined (fatigue thresholds are formally violated) and requires explicit managerial sign-off, incident logging, and post-shift health monitoring. It should only be chosen when Options 1–4 are operationally infeasible and the demand deadline is critical.
+      Preserves human constraints: No | Gap: ~0.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 11 balanced FS3 candidates
+    Pareto front: [FS3b_det, FS3d_det, FS3e_det, FS3opt_det]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=85.3 uph | Noise=81.1 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 85.3 uph (target was 100.0; gap 14.7 uph)
+    Noise: 81.1 dB | Fatigue: {'H1': 0.3744, 'H2': 0.0, 'H3': 0.38}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 11 next-shift candidates (FS4)
+    Pareto front: [FS4b_det, FS4d_det, FS4opt_det]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=100%
+  [L4] FS4 pre-staged with 4 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=85.3 uph | Noise=81.1 dB
+  [run 08] ok in 450.5s; LLM calls=7 exceptions=0 empty=0 schema_invalid=0 fallbacks=0 llm_warnings={'contract_repair': 10}
+
+======================================================================
+  RUN 09 / 9   (factory, LLM)
+======================================================================
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+2026-09-07 10:52:27,270 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H1; adding it back
+2026-09-07 10:52:27,270 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H2; adding it back
+2026-09-07 10:52:27,270 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FatigueIndex_H3; adding it back
+2026-09-07 10:52:27,270 cbpa.runner.factory_experiment [WARNING] LLM omitted mandatory constraint FactoryNoise; adding it back
+2026-09-07 10:52:27,270 cbpa.runner.factory_experiment [WARNING] LLM contract omitted typed assumption(s) ['factory_demand_uph', 'cellA_demand_uph', 'cellB_demand_uph', 'h2_availability', 'supply_vc_available', 'agv_transfer_time_s']; re-inserted from the plant model
+  [L1] Contract C1_factory elicited:
+    KPIs:        total_factory_throughput, product_quality
+    Constraints: operator_fatigue_per_individual <= 0.4, combined_noise_level <= 80.0, product_quality_floor >= 0.99, variant_coverage >= 3.0, FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0
+    Ambiguities: 5 resolved
+
+  [L2] Generated 11 candidates, Pareto selected FS1opt_det
+  [L3] Verification: feasible=True | P(feasible)=100%
+    Margins: {'FatigueIndex_H1': 0.0195, 'FatigueIndex_H2': 0.0145, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 1.5}
+  [L4] Guards armed: 4 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.5 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+2026-09-07 10:55:03,866 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'AggressiveFullPush'
+  [L2] Generated 10 aggressive replan candidates
+    Pareto front: [AggressiveFullPush, HumanOptimized_LowNoise, FS2d_det, FS2e_det]
+2026-09-07 10:55:03,867 cbpa.runner.factory_experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries AggressiveFullPush forward flagged
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 0.6722 violates <= 0.4
+    Violation: FatigueIndex_H3: 0.6001 violates <= 0.4
+    Violation: FactoryNoise: 87.8 violates <= 82.0
+    Margins: {'FatigueIndex_H1': -0.2722, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': -0.2001, 'FactoryNoise': -5.8}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] A 20% demand surge has triggered three simultaneous constraint violations in the two-cell factory: operator H1's fatigue index reached 0.6722 (limit 0.40, excess +0.2722), operator H3's fatigue index reached 0.6001 (limit 0.40, excess +0.2001), and combined factory noise reached 87.8 dB (limit 82.0 dB, excess +5.8 dB). Operator H2 retains a fatigue margin of 0.35 and is substantially underutilized. H3's certification restricts her exclusively to inspection tasks, limiting direct workload redistribution onto her. The current schedule is infeasible at the requested demand level without remediation.
+
+  [Escalation] 5 remediation options:
+    - Option 1 (Recommended): Cross-Cell Redistribution — Transfer H1 Overflow to H2 and Stagger Noise-Intensive Operations: Reassign the highest-fatigue tasks currently allocated to H1 to operator H2, who holds a fatigue margin of 0.35 and is significantly underutilized. Simultaneously, offset the peak-noise operating cycles of Cell_1 and Cell_2 by 10–15 minutes so their maximum acoustic contributions do not overlap, reducing combined instantaneous noise from 87.8 dB to an estimated 81.5 dB. H3 continues in her certified inspection-only role with no additional load. Projected outcome: H1 fatigue drops to approximately 0.38, combined factory noise to approximately 81.5 dB, all constraints satisfied. Throughput impact is minor (~3% slip) due to cycle-staggering overhead.
+      Preserves human constraints: Yes | Gap: ~5.0%
+    - Option 2: Overtime / Backup Operator Deployment — Add Certified Backup B1: Deploy one certified backup operator (B1) to split workload with H1 and H3 for the remainder of this shift. B1 absorbs approximately 42% of H1's task volume and assists H3 with inspection throughput under H3's supervision, reducing H1's projected fatigue index to approximately 0.38 and H3's to approximately 0.36. Assigning B1 to take over the noisiest Cell_2 sub-process also allows Cell_1 throughput to be modestly throttled, bringing combined noise to approximately 81.8 dB. Requires overtime authorization and confirmation that B1 holds current certifications for the relevant task types. Full demand volume can be met with minimal deadline impact.
+      Preserves human constraints: Yes | Gap: ~0.0%
+    - Option 3: Product Mix Change — Defer the Highest-Impact Variant to Next Shift: Identify and defer the single production variant with the largest combined noise and operator fatigue footprint (typically the most mechanically intensive or highest-cycle-count variant). Removing it from this shift is projected to reduce combined factory noise by approximately 6–7 dB (to ~81 dB) and H1's fatigue index by approximately 0.29 (to ~0.38), resolving all three violations in one action. H3's fatigue also drops to approximately 0.37. The deferred variant is rescheduled to the following shift or an approved overtime window. This option carries a throughput shortfall of approximately 10% this shift but preserves all human-centric and safety constraints.
+      Preserves human constraints: Yes | Gap: ~12.0%
+    - Option 4: Throughput Reduction — Scale Back Both Cells to Constraint-Feasible Level: Reduce overall production volume across Cell_1 and Cell_2 proportionally until all three active constraints are simultaneously satisfied. Sensitivity analysis indicates that a throughput reduction of approximately 17–18% from the demanded (post-surge) level brings H1 fatigue to 0.40, H3 fatigue to 0.40, and combined factory noise to 82.0 dB — all exactly at their limits with zero margin. All human-centric and safety constraints are fully preserved with no relaxation required. The production manager must notify downstream supply chain of an approximately 17% unfulfilled demand gap for this shift and arrange recovery in subsequent shifts. No operator reassignments or variant changes are required.
+      Preserves human constraints: Yes | Gap: ~17.0%
+    - Option 5 (Last Resort): Supervised Constraint Relaxation — Temporary Limit Uplift with Mandatory Compensating Controls: With explicit written authorization from the production manager and formal risk-acceptance documentation, temporarily relax the following limits for this shift only: H1 fatigue ceiling raised from 0.40 to 0.70, H3 fatigue ceiling raised from 0.40 to 0.65, and factory noise ceiling raised from 82 dB to 88 dB. Mandatory compensating controls must be activated before production resumes: (1) mandatory 15-minute rest breaks for H1 and H3 every 90 minutes, (2) all floor personnel upgraded to Class 5 hearing protection (PPE), (3) real-time continuous noise monitoring with automatic cell-stop trigger at 89 dB, and (4) post-shift health check for H1 and H3. Full demand can be met with zero deadline gap. This option explicitly DOES NOT preserve human-centric constraints as originally specified and must be audit-logged with regulatory traceability. It is provided only as an emergency fallback when all other options are unavailable within the shift window.
+      Preserves human constraints: No | Gap: ~0.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 11 balanced FS3 candidates
+    Pareto front: [FS3b_det, FS3d_det, FS3e_det, FS3opt_det]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=85.3 uph | Noise=81.1 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 85.3 uph (target was 100.0; gap 14.7 uph)
+    Noise: 81.1 dB | Fatigue: {'H1': 0.3744, 'H2': 0.0, 'H3': 0.38}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 11 next-shift candidates (FS4)
+    Pareto front: [Fatigue-Guard-Ultra-Conservative, FS4b_det, FS4d_det, FS4opt_det]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=100%
+  [L4] FS4 pre-staged with 4 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=85.3 uph | Noise=81.1 dB
+  [run 09] ok in 519.3s; LLM calls=7 exceptions=0 empty=0 schema_invalid=0 fallbacks=0 llm_warnings={'contract_repair': 10}
+
+  Batch done: ok=5 error=0 skipped=0  →  data/repeated/factory_claude-sonnet-4-6_optanchor_analytical

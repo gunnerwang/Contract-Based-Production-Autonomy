@@ -1,0 +1,2141 @@
+  LLM check: Claude (claude-sonnet-4-6) connected
+  Batch root: data/repeated/single_full_claude-sonnet-4-6_llmonly_integrated   (commit 1c3e79945bd7a2780db656361de67bfe8091399a, prompts 2c7b5ca637c9)
+
+======================================================================
+  RUN 07 / 9   (single, LLM)
+======================================================================
+2026-09-05 23:07:15,486 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+2026-09-05 23:07:15,510 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:08:23,471 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:08:23,471 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:08:23,473 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue_index (upper_bound), ambient_noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. resource_efficiency / labor-hours denominator vs. operator_fatigue_index hard constraint
+       Q: Since labor-hours appear in the efficiency denominator, the optimiser is incentivised to minimise operator headcount or maximise per-operator workload, which will systematically push the fatigue index toward 0.4: is there a minimum crew size or per-operator workload cap (e.g. no operator may carry more than 1.0× standard task load) that must be respected independently of the efficiency objective?
+       A: Assume current crew size is fixed for the shift and cannot be reduced; the optimiser may only adjust task allocation among existing operators, with each operator's individual fatigue proxy capped at 0.4.
+    2. resource_efficiency / no minimum throughput floor
+       Q: The contract maximises the efficiency ratio with no lower bound on absolute output: the optimiser could achieve a very high ratio by running at near-zero throughput with perfect quality—is there a minimum acceptable output volume per shift (e.g. at least 80% of the nominal production target in units) below which the shift is considered a failure regardless of efficiency score?
+       A: Apply a soft floor equal to 75% of the shift's scheduled production order quantity; falling below this floor adds a large penalty term to the objective rather than causing hard infeasibility, to avoid over-constraining feasibility.
+    3. ambient_noise_level / noise measurement averaging window
+       Q: The 80 dB limit is defined as a shift-averaged LAeq, which permits short burst events well above 80 dB (e.g. a 95 dB peak for several minutes can still satisfy an 8-hour average): should the 80 dB cap also apply as a short-interval maximum (e.g. any 15-minute LAeq window) to prevent hazardous peak exposures, or is the full-shift average sufficient?
+       A: Enforce 80 dB as both the full-shift LAeq average and a rolling 15-minute LAeq cap, to align with ISO 9612 occupational noise measurement best practice.
+    4. resource_efficiency / value_definition quality weighting
+       Q: Delivered value is defined as 'output quality score × throughput units,' but the quality score scale and its relative weight versus throughput are unspecified: should a 10% increase in quality score be treated as equally valuable as a 10% increase in throughput, or does management assign a different substitution rate (e.g. 1 quality-score point = N throughput units)?
+       A: Treat quality score and throughput as equally weighted (substitution rate 1:1 on normalised scales), with quality score defined as the fraction of units passing first-pass inspection; override with price-weighted value if a transfer price schedule is available in the MES.
+    5. operator_fatigue_index / fatigue proxy data availability and fallback
+       Q: The hard fatigue constraint (≤ 0.4) is enforced via real-time proxy sensors (HRV, posture monitoring), but if sensor data are delayed, missing, or unreliable mid-shift, the optimiser has no specified fallback: what should the optimiser do if fatigue telemetry is unavailable for more than 10 consecutive minutes—pause re-optimisation, assume worst-case fatigue = 0.4, or revert to a rule-based schedule?
+       A: If fatigue telemetry is absent for more than 10 minutes, freeze the current schedule and assume operator fatigue equals the last known value plus 0.02 per additional 10-minute gap, until data is restored or a supervisor manually overrides.
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 6 non-dominated [Balanced_Moderate, Ergonomic_Priority, Efficiency_Lean, Quiet_Conservative, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:08:44,800 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:08:44,801 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:08:44,801 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +20.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +20.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 62.4 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:09:31,303 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'fast_noise_capped'
+2026-09-05 23:09:31,303 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries fast_noise_capped forward flagged
+  [L2] 10 aggressive S2 variants generated
+    Pareto front: 1 non-dominated [fast_noise_capped]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.5762 violates <= 0.4
+    Violation: Noise: 82.6 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+20.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+20.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.18 -> 0.8 (Fatigue index (0.5762) exceeds the hard limit of 0.4 by 44%. The human_cycle_rate_multiplier is the direct causal driver of operator fatigue — it governs cycle pace and muscular demand. Reducing from 1.18 to 0.80 (a 32% cut) should bring fatigue roughly proportionally down to ~0.39, just inside the 0.4 ceiling, assuming approximately linear fatigue-rate coupling. This is the smallest single change that can resolve the fatigue violation without touching robot speeds.)
+    r2_speed_fraction: 0.88 -> 0.75 (Noise (82.6 dB) exceeds the 80.0 dB ceiling by 2.6 dB. r2 runs at the highest speed fraction (0.88) and is therefore the dominant acoustic emitter. Mechanical noise scales steeply with rotational/linear speed (often power-law with exponent 3–5), so a ~14.8% speed reduction on the loudest source is the most efficient lever. Targeting 0.75 provides a ~2–3 dB reduction on r2's contribution, which should pull total system noise to or below 80 dB, particularly when combined with any secondary reduction on r1.)
+    r1_speed_fraction: 0.85 -> 0.78 (As a secondary noise-reduction measure, trimming r1 from 0.85 to 0.78 (~8.2% reduction) provides an additional acoustic margin to ensure the 80 dB ceiling is reliably met across operating variance. With both robots reduced, the combined noise floor drops safely below the constraint rather than sitting at the edge. This also partially compensates throughput loss from the human cycle rate reduction by maintaining moderate robot-side throughput.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 20.0% demand surge has produced a schedule that violates two human-centric constraints simultaneously. FatigueIndex reached 0.5762 (limit 0.40, overage +0.1762) and Noise reached 82.6 dB(A) (limit 80.0 dB(A), overage +2.6 dB(A)). Because both violations concern worker health and safety, the schedule was automatically rejected by the CBPA governance layer and requires production manager authorization before any remediation path is enacted. No production run will proceed until one of the options below is approved and logged.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 — Add Supplementary Shift Capacity (Recommended): Introduce a second partial shift or bring in temporary certified operators to absorb the 20% demand increment. By distributing the additional workload across more labor-hours, individual FatigueIndex and per-station Noise exposure both return within limits without touching any constraint threshold. Estimated lead time to staff readiness: 24–48 hours. Capital cost is higher but all human-centric guardrails remain fully intact. Recommend pairing with a short-cycle demand buffer to avoid recurrence.
+      Preserves human constraints: Yes
+    - Option 2 — Relax Noise Ceiling to 83.0 dB(A) with Mandatory PPE Protocol: Grant a time-limited Noise relaxation from 80.0 to 83.0 dB(A) exclusively for the duration of the elevated-demand period. This closes the 2.6 dB(A) gap with a 0.4 dB(A) safety buffer. Mandatory Class-B hearing protection must be issued and logged per station; continuous noise dosimetry monitoring must be active. FatigueIndex constraint (≤ 0.40) remains unchanged and must be satisfied by the scheduler independently—this option does NOT address the fatigue violation and therefore still requires a secondary action (e.g., micro-break insertion, task rotation) before the schedule can pass.
+      Preserves human constraints: No
+    - Option 3 — Temporary Dual-Constraint Relaxation with Full Mitigation Package (Last Resort): Temporarily raise both limits—FatigueIndex to 0.58 and Noise to 83.0 dB(A)—for a defined window not to exceed 5 consecutive working days. This option meets the 20% demand surge with zero schedule gap but carries the highest human-welfare risk. Mandatory controls: (a) real-time fatigue monitoring with automatic rest-break triggers if index exceeds 0.55, (b) Class-A hearing protection and 15-minute quiet-zone rotations every 90 minutes, (c) daily occupational-health sign-off, and (d) automatic reversion to original limits at window expiry. Requires dual sign-off from Production Manager and EHS representative. Should only be selected if Option 1 and Option 2 are operationally infeasible.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:11:05,934 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:11:05,934 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:11:05,934 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] No learning bias (first shift — no prior experience)
+
+  [L5] Adaptation reasoning: meso
+    Insight: 100% FatigueIndex violation under moderate robot speeds indicates the current policy family lacks fatigue management mechanisms entirely; switching policy families (MESO) targets the structural gap, while MICRO cannot bridge a 0% feasibility gap and MACRO is disproportionate for a +20% demand surge that a robust policy should handle.
+
+  [L2] 10 balanced S3 variants generated
+    Pareto front: [balanced-conservative, balanced-asymmetric, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=96% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 1)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +20.0%
+
+  [L4] S3 DEPLOYED | Throughput=30.4 u/h | V/R=0.395 | P(feasible)=96%
+2026-09-05 23:11:57,417 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:11:57,418 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 242
+    Throughput:     30.4 u/h
+    Defect rate:    0.0081
+    Fatigue index:  0.3115
+    Noise:          79.7 dB
+    Energy:         371.0 kWh
+    Deadline gap:   51.4%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.7 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.7 (threshold 75.0) -> warn
+2026-09-05 23:11:57,418 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:12:13,906 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:12:13,906 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:12:13,906 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:12:13,908 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:12:13,908 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:12:13,909 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:12:13,939 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:13:17,188 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:13:17,188 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:13:17,188 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue (minimize), noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. resource_scope / resource_efficiency denominator
+       Q: How should energy, labour, and materials be aggregated into a single resource denominator when computing efficiency? For example, should 1 kWh and 1 operator-hour be treated as equivalent, or should each carry a monetary weight (e.g. energy $0.12/kWh, labour $25/hour, materials at market cost)?
+       A: Apply monetary cost weighting: energy at $0.12/kWh, direct labour at $25/operator-hour, and materials at standard purchase cost; sum to a single currency denominator before computing the efficiency ratio.
+    2. delivered_value_definition / unit_value
+       Q: When computing delivered value as 'units_produced × unit_value', which price basis defines unit_value — sale price, standard cost, or contribution margin — and if multiple product variants run this shift, does each variant carry its own unit_value weight?
+       A: Use sale price per unit as delivered value; if multiple variants are present, apply each variant's list price proportionally to the units produced of that variant.
+    3. operator_fatigue / minimize direction vs. hard-constraint limit
+       Q: Is the fatigue target of 0.4 only a hard ceiling (any value ≤ 0.4 is equally acceptable), or should the optimiser actively reward lower fatigue — for example, treating fatigue of 0.15 as meaningfully better than 0.38 even though both satisfy the constraint?
+       A: Treat 0.4 as a hard ceiling only; do not add a secondary soft reward for sub-0.4 fatigue unless the manager specifies a preferred fatigue target (e.g. 0.25) in addition to the ceiling.
+    4. noise_level / measurement method
+       Q: Does the 80 dB limit apply as an A-weighted time-averaged level over the shift (LAeq,8h — the standard occupational exposure metric), or as a maximum instantaneous reading at any moment? A brief spike above 80 dB during a high-intensity operation may comply under LAeq but violate a peak constraint.
+       A: Apply 80 dB as the maximum instantaneous A-weighted sound pressure level (dB(A)) at the operator workstation; instantaneous exceedance triggers a constraint violation regardless of average level.
+    5. resource_efficiency / missing upper bound or minimum resource floor
+       Q: Is there a maximum efficiency gain target (e.g. no more than 25% above the shift baseline) or a minimum resource floor (e.g. staffing cannot drop below 2 operators per line) that should cap how aggressively the optimiser reduces resource consumption in pursuit of efficiency?
+       A: Apply no explicit upper bound on efficiency gain; rely on the fatigue ≤ 0.4 and noise ≤ 80 dB hard constraints as the implicit safety floor, and flag any optimal solution that implies a resource reduction greater than 30% versus the baseline shift plan for manager review.
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 6 non-dominated [C1_balanced_moderate, C1_fatigue_priority, C1_efficiency_lean, C1_conservative_safe, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:13:36,184 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:13:36,185 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:13:36,185 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +15.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +15.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 59.8 (+15.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 59.8 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:14:30,046 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2a_det'
+2026-09-05 23:14:30,046 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2a_det forward flagged
+  [L2] 10 aggressive S2 variants generated
+    Pareto front: 6 non-dominated [R1-Dominant Sprint, Max-Throughput Blitz, Noise-Aware Fast, S2a_det, S2c_det, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+15.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+15.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.85 (FatigueIndex at 0.6001 exceeds the 0.4 ceiling by 0.2001. The human cycle rate multiplier is the direct driver of operator fatigue — reducing it from 1.15 to 0.85 cuts the pace demand by ~26%, which should proportionally reduce fatigue accumulation and bring the index closer to the 0.4 limit. This is the highest-leverage single change for the fatigue violation.)
+    r2_speed_fraction: 1.0 -> 0.72 (Noise at 84.9 dB exceeds the 80.0 dB limit by 4.9 dB. R2 is running at full speed (1.0), making it the dominant noise emitter. Robot noise scales approximately as 20·log10(speed), so reducing R2 speed from 1.0 to 0.72 yields a reduction of roughly 20·log10(0.72) ≈ −2.8 dB. This is the single largest noise-reduction lever with minimal downstream pipeline disruption since R1 is already the bottleneck at 0.9.)
+    r1_speed_fraction: 0.9 -> 0.76 (After reducing R2, a residual noise gap of ~2.1 dB remains. Reducing R1 from 0.9 to 0.76 gives approximately 20·log10(0.76/0.9) ≈ −1.5 dB additional reduction. Combined with the R2 change the total estimated noise reduction is ~4.3–5.0 dB, sufficient to reach ≤80.0 dB. Keeping R1 at 0.76 (rather than lower) preserves a reasonable throughput floor and avoids over-correction.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 15.0% demand surge has produced a candidate schedule that violates two human-centric constraints simultaneously. The Fatigue Index reached 0.6001, exceeding the hard ceiling of 0.40 by a margin of +0.2001 (50% over limit). Noise exposure reached 84.9 dB, exceeding the 80.0 dB ceiling by 4.9 dB (6.1% over limit). Both violations carry direct worker-safety implications and cannot be accepted as-is. The scheduler has halted and escalated for human decision. Three ranked remediation paths follow, ordered from most to least protective of human-centric constraints.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Add Shift Resources to Absorb Demand Surge: Authorize one additional production crew or extend a parallel line to distribute the 15% volume increase across more labour-hours. This keeps individual worker fatigue and noise exposure within existing certified limits. Requires shift supervisor approval and may incur overtime cost, but no constraint ceiling needs to be altered. Scheduler can be re-run immediately once resource allocation is confirmed.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Relax Noise Limit to 85 dB with Mandatory PPE Protocol: Raise the operational Noise ceiling from 80.0 dB to 85.0 dB for the duration of the surge period only. OSHA/ISO permissible exposure at 85 dB requires mandatory use of Class-A hearing protection for all floor personnel and continuous dosimeter monitoring. The Fatigue Index constraint remains unchanged at ≤ 0.40 and must be honoured; additional micro-rest breaks should be inserted to ensure compliance. This relaxation eliminates the noise violation entirely and reduces the overall constraint pressure, but the fatigue margin of -0.2001 still requires load-levelling across tasks. Estimated residual demand shortfall ~8% without further action on fatigue.
+      Preserves human constraints: No
+    - Option 3 (Last Resort): Temporary Dual-Constraint Relaxation with Compensatory Controls: Raise both the Noise ceiling to 85.0 dB (with PPE mandate) and the Fatigue Index ceiling to 0.50 for a strictly time-boxed window (recommend ≤ 5 consecutive shifts). Compensatory measures must be activated in parallel: enforced 20-minute rest intervals every 90 minutes, post-shift fatigue assessments, and daily audiometric screening. A return-to-baseline review is mandatory before any extension. This option fully absorbs the 15% demand spike and closes the deadline gap to zero, but it constitutes a formal temporary waiver of both human-centric constraints and must be documented, signed off by the safety officer, and reviewed after the surge window closes.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:16:22,445 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:16:22,445 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:16:22,445 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 2 prior experience(s):
+    Avoid:  ['S2']
+    Prefer: ['S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: meso
+    Insight: Prior experience fingerprint matches: S2 (aggressive) rejected, S3 (robust) accepted. Switch to the S3 robust policy family — it trades throughput for lower per-worker intensity, directly relieving the FatigueIndex binding constraint, with secondary benefit to Noise levels through reduced machine utilization rates.
+    Synthesis: For demand_surge disturbances, S2 is deterministically infeasible when worker fatigue exceeds 0.4 or noise exceeds 80 dB — both hard constraints that must be checked first before evaluation. S3 satisfies feasibility constraints and achieves acceptable throughput, but the 51.4% deadline gap suggests demand_surge may still strain capacity even with a viable policy. Future planning should prioritize constraint-safe policies (like S3) and investigate whether supplementary actions (e.g., overtime, cross-training) can close the deadline gap. Confidence is very low due to n=1.
+
+  [L2] 8 balanced S3 variants generated
+    Pareto front: [B-C2-S3a, B-C2-S3b, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 3)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +15.0%
+
+  [L4] S3 DEPLOYED | Throughput=35.5 u/h | V/R=0.418 | P(feasible)=100%
+2026-09-05 23:17:18,907 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:17:18,908 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 283
+    Throughput:     35.5 u/h
+    Defect rate:    0.0081
+    Fatigue index:  0.3427
+    Noise:          79.2 dB
+    Energy:         389.0 kWh
+    Deadline gap:   40.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.2 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.2 (threshold 75.0) -> warn
+2026-09-05 23:17:18,908 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:17:40,711 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:17:40,711 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:17:40,711 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+2026-09-05 23:17:40,712 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:17:40,714 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:17:40,715 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:17:40,715 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:17:40,715 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:17:40,745 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:18:48,420 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:18:48,421 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:18:48,421 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        delivered_value_per_resource (maximize), operator_fatigue_index (upper_bound), ambient_noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. delivered_value_per_resource (no upper bound on absolute resource use)
+       Q: Is there a cap on any individual resource (e.g., total energy ≤ X kWh, or labor hours cannot exceed the scheduled headcount) so the optimiser cannot inflate absolute consumption while keeping the ratio high — for example, doubling both output and energy use simultaneously?
+       A: Apply a per-resource absolute ceiling equal to 110% of the historical shift baseline for each resource category (energy, labor-hours, direct material), preventing runaway consumption while still allowing incremental efficiency gains.
+    2. ambient_noise_level (LAeq shift-average vs. short-term peaks)
+       Q: The 80 dB limit is defined as a shift-average (LAeq), which permits machines to run at 85–90 dB during production bursts if quieter periods compensate — should a short-term instantaneous ceiling (e.g., 83 dB over any 15-minute window) also be enforced?
+       A: Add a secondary short-term limit of 83 dB(A) over any rolling 15-minute window, matching the EU Directive 2003/10/EC upper exposure action value, in addition to the existing 80 dB shift-average constraint.
+    3. context.optimization_horizon (shift duration unspecified)
+       Q: What is the actual shift length in hours (e.g., 8 h, 10 h, 12 h), including any mandatory breaks, since cumulative fatigue accumulation and the feasibility of the fatigue ≤ 0.4 constraint depend critically on total exposure time and scheduled rest intervals?
+       A: Assume a standard 8-hour shift with two 15-minute paid breaks and one 30-minute unpaid meal break; operator-rotation intervals are therefore optimised within six working blocks of approximately 75 minutes each.
+    4. assumptions.resource_scope (missing cost weights across resource categories)
+       Q: Energy, labor-hours, and direct material are combined into a single denominator — without explicit unit-cost weights (e.g., £/kWh, £/labor-hour, £/kg material), cutting 10% of material looks identical to cutting 10% of energy; should the optimiser use current standard-cost rates, or equal weighting across categories?
+       A: Use equal fractional weighting (each resource category contributes one-third of the normalised denominator) until standard-cost rates are provided, preventing unintended over-optimisation of whichever resource happens to carry the largest absolute value.
+    5. priority_order vs. _raw_priority_order (intra-HumanWellbeing tie-break missing)
+       Q: The top-level priority groups noise and fatigue together under 'HumanWellbeing', but the raw priority order ranks ambient_noise_level above operator_fatigue_index — when both constraints simultaneously approach their limits and relaxing one requires tightening the other (e.g., slowing a noisy machine reduces noise but extends shift duration, increasing fatigue), which should the optimiser protect first?
+       A: Follow the _raw_priority_order ranking: ambient_noise_level is protected before operator_fatigue_index, consistent with the regulatory primacy of acoustic exposure limits under EU Directive 2003/10/EC, which carries legal penalty risk exceeding ergonomic policy risk.
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 6 non-dominated [Conservative Baseline, Noise-Priority Moderate, Balanced Moderate, Asymmetric Efficiency, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:19:07,574 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:19:07,574 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:19:07,575 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +25.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +25.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 65.0 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:20:02,378 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2d_det'
+2026-09-05 23:20:02,378 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2d_det forward flagged
+  [L2] 10 aggressive S2 variants generated
+    Pareto front: 2 non-dominated [noise-constrained-max-throughput, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+25.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+25.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.8 (Fatigue index (0.6001) is ~50% above the hard limit of 0.40, requiring a substantial reduction. Human cycle rate is the direct driver of fatigue accumulation. Reducing from 1.15 to 0.80 (a ~30% decrease) is estimated to bring fatigue index to approximately 0.42–0.39, clearing the 0.40 threshold. This is the binding constraint and must be resolved first.)
+    r2_speed_fraction: 1.0 -> 0.8 (Noise at 84.9 dB exceeds the 80.0 dB limit by ~5 dB. r2 is running at maximum speed (1.0), making it the dominant contributor to acoustic output. Robot noise scales nonlinearly with speed (roughly speed^2 to speed^3 in power terms); reducing r2 from 1.0 to 0.80 (a 20% speed reduction) is estimated to cut r2 acoustic power by ~36%, yielding a 3–6 dB reduction at the measurement point and bringing total noise below 80 dB.)
+    buffer_time_s: 0.85 -> 0.95 (After reducing human_cycle_rate_multiplier and r2_speed_fraction, throughput will decrease from 48.2 UPH. Increasing buffer_time_s from 0.85 to 0.95 smooths the pipeline by allowing stations more inter-cycle slack, reducing starvation and blocking effects. This partially recovers throughput lost from the speed/rate reductions without reintroducing fatigue or noise violations, since buffer time does not directly increase robot speed or human exertion rate.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 25.0% demand surge has rendered the current production schedule infeasible under active human-centric constraints. Two violations are present: (1) FatigueIndex reached 0.6001, exceeding the 0.40 ceiling by a margin of -0.2001 — a 50% overshoot that poses meaningful ergonomic and safety risk to workers; (2) Ambient Noise reached 84.9 dB, exceeding the 80.0 dB limit by 4.9 dB, which crosses occupational hearing-protection thresholds. Both constraints are classified as human-centric and cannot be automatically overridden by the CBPA scheduler without explicit governance approval. No feasible schedule exists under current resource and constraint parameters that satisfies the elevated demand. Immediate escalation and a production manager decision are required before rescheduling can proceed.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Add Supplementary Shift Capacity: Introduce a second partial shift or authorize planned overtime distributed across additional workers to absorb the 25% demand increase. By spreading task load across a larger workforce, per-worker FatigueIndex returns below 0.40 and machine duty cycles decrease sufficiently to bring noise back within 80.0 dB. No constraint limits need to be relaxed. Requires HR coordination and may incur overtime cost, but is the only option that fully satisfies demand without compromising worker welfare.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Defer 20% of Demand to Next Scheduling Window: Accept 80% of the increased demand in the current window and reschedule the remaining 20% (equivalent to the pre-surge baseline uplift) to the next available production window. This brings workload within range of feasible schedules that satisfy both FatigueIndex <= 0.40 and Noise <= 80.0 dB. Suitable when downstream buffers or customer lead-time agreements permit a short delay. Preserves all human-centric constraints without adding headcount.
+      Preserves human constraints: Yes
+    - Option 3 (Last Resort): Time-Limited Supervised Constraint Relaxation with Compensatory Controls: With explicit manager sign-off and documented risk acceptance, temporarily raise the FatigueIndex ceiling to 0.50 and the Noise ceiling to 84.0 dB for this scheduling window only. Mandatory compensatory controls must be activated simultaneously: (a) enforce 15-minute mandatory rest breaks every 90 minutes of active work, (b) require PPE hearing protection rated >= 5 dB NRR for all floor personnel, and (c) schedule a post-window ergonomic review. This relaxation is single-window and must not be carried forward. A small residual deadline gap of approximately 5% is still expected due to rescheduling friction under the elevated but still-limited thresholds.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:21:53,706 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:21:53,706 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:21:53,706 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 4 prior experience(s):
+    Avoid:  ['S2', 'S2']
+    Prefer: ['S3', 'S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: meso
+    Insight: Prior experience is unambiguous: S2 fails, S3 succeeds in this disturbance regime. The fatigue constraint is not intrinsically infeasible — it is policy-specific, making MESO the correct and sufficient intervention.
+    Synthesis: S2 is deterministically excluded for demand_surge due to hard ergonomic violations (Fatigue > 0.4, Noise > 80dB) across all observed attempts — skip it immediately in future planning to save evaluation time. S3 is the only confirmed viable policy, satisfying all constraints in both trials with throughput in [30.4, 35.5] UPH. However, deadline_gap_pct remains elevated (40.7–51.4%), indicating S3 handles demand_surge safely but leaves significant schedule slack unexploited; a tighter scheduling or overtime policy layered on S3 may close this gap. Confidence is modest given only 2 samples with identical policy outcomes — the S2 rejection is high-confidence (deterministic rule), but S3 performance bounds need more trials to confirm stability.
+
+2026-09-05 23:22:59,152 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,160 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,160 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+  [L2] 9 balanced S3 variants generated
+    Pareto front: [S3-A_BalancedModerate, S3-D_ConservativeSafetyMargin, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 5)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +25.0%
+
+  [L4] S3 DEPLOYED | Throughput=23.7 u/h | V/R=0.360 | P(feasible)=100%
+2026-09-05 23:22:59,162 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:22:59,162 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 189
+    Throughput:     23.7 u/h
+    Defect rate:    0.0077
+    Fatigue index:  0.2847
+    Noise:          78.5 dB
+    Energy:         367.0 kWh
+    Deadline gap:   63.5%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=78.5 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=78.5 (threshold 75.0) -> warn
+2026-09-05 23:22:59,162 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:22:59,162 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,162 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+2026-09-05 23:22:59,162 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,162 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+2026-09-05 23:22:59,163 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:22:59,163 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'product_quality_conformance_rate' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:23:21,554 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:23:21,555 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:23:21,555 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:23:21,558 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:23:21,559 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:23:21,559 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+  [run 07] ok in 966.2s; LLM calls=35 exceptions=0 empty=0 schema_invalid=3 fallbacks=0 llm_warnings={'contract_repair': 54}
+
+======================================================================
+  RUN 08 / 9   (single, LLM)
+======================================================================
+2026-09-05 23:23:21,589 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+2026-09-05 23:23:21,611 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:24:36,661 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:24:36,661 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:24:36,662 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue_index (minimize), ambient_noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0, shift_duration <= 480.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. assumptions.noise_measurement vs assumptions.noise_aggregation
+       Q: Should the 80 dB(A) limit be enforced as the spatial average across all active workstations, or as the worst-case maximum at any single workstation? — these two interpretations can differ by 6–10 dB in a mixed-process cell and change whether high-speed machining stations are feasible at all.
+       A: Apply the stricter interpretation: 80 dB(A) is the spatial and temporal maximum at any operator ear-level measurement point, consistent with assumptions.noise_aggregation. The 'spatial average' wording in assumptions.noise_measurement is treated as a drafting error and overridden.
+    2. resource_efficiency (denominator — cross-resource conversion weights)
+       Q: What are the relative cost weights for converting energy (kWh), labor (hours), and raw materials (kg) into a single 'total_resources_consumed' figure? — for example, if energy is weighted 10× cheaper than labor, the optimizer will freely substitute energy for labor; if weights are reversed, the opposite occurs, and the two solutions can differ by ~30% in throughput.
+       A: Use equal monetary-cost weighting derived from the plant's most recent period-average unit costs (energy $/kWh, labor $/hr, material $/kg) as reported in the ERP system; if unavailable, weight all three resources equally at 1.0 per unit consumed.
+    3. priority_order vs context._raw_priority_order
+       Q: The top-level priority_order contains only 'HumanWellbeing', implying fatigue and noise safety dominate all efficiency gains; but _raw_priority_order lists resource_efficiency first. Which hierarchy governs when the optimizer must choose between, say, a 15% efficiency gain that pushes fatigue to 0.39 vs a safer schedule that holds fatigue at 0.30 with 5% lower efficiency?
+       A: Treat 'HumanWellbeing' as the lexicographic top priority: any solution that reduces operator_fatigue_index or improves noise headroom is preferred over a higher-efficiency solution, provided both solutions satisfy all hard constraints. Resource efficiency is maximised only within the Pareto front of human-wellbeing outcomes.
+    4. resource_efficiency (no saturation / satisficing threshold)
+       Q: Is there a minimum acceptable efficiency improvement (e.g., ≥ 10% above the current baseline) above which further optimisation effort should shift to protecting fatigue margin and noise headroom, or should the optimizer always push efficiency to its feasible maximum even for marginal 1–2% increments that consume the full fatigue budget?
+       A: The optimizer maximises resource_efficiency to the feasible limit with no satisficing threshold. Hard constraint margins (fatigue ≤ 0.4, noise ≤ 80 dB) are the only backstop; no efficiency saturation is applied unless the manager specifies a baseline target.
+    5. hard_constraints.shift_duration (upper bound only — no minimum)
+       Q: The shift_duration constraint allows any duration up to 480 minutes but sets no minimum. Can the optimizer declare the shift complete early (e.g., at 320 minutes) once it cannot improve efficiency further, or must the full 480-minute window be utilised for production?
+       A: Assume the full 480-minute shift window must be utilised; early termination is not permitted. The optimizer schedules activity for the complete shift, using lower-intensity tasks or planned maintenance to fill remaining time without violating fatigue or noise limits.
+
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:24:56,149 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+  [L2] Generated 9 candidate schedules
+    Pareto front: 5 non-dominated [Balanced Moderate, Fatigue-Priority Comfort, Low-Noise Steady, S1d_det, S1e_det]
+    Selected: S1e_det
+
+2026-09-05 23:24:56,151 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:24:56,152 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:24:56,153 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:24:56,153 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:24:56,153 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +20.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +20.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 62.4 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:25:39,729 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2d_det'
+2026-09-05 23:25:39,729 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2d_det forward flagged
+2026-09-05 23:25:39,730 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+  [L2] 9 aggressive S2 variants generated
+    Pareto front: 3 non-dominated [Throughput-Max, Noise-Constrained-Fast, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+20.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+20.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.75 (FatigueIndex of 0.6001 must fall to ≤ 0.4. Fatigue scales approximately linearly with the human cycle rate multiplier. At 1.15 the index is 0.6001, so the implied base fatigue is ≈ 0.522. To reach 0.4 the multiplier must be ≤ 0.4/0.522 ≈ 0.767; suggesting 0.75 provides a small safety margin below that threshold.)
+    r2_speed_fraction: 1.0 -> 0.75 (Noise is 84.9 dB, 4.9 dB above the 80.0 dB ceiling. r2 is running at full speed (1.0), making it the dominant noise source relative to r1 at 0.9. Reducing r2 to 0.75 (a 25% cut) removes the single largest controllable noise contributor. A 15% reduction to 0.85 is insufficient given typical logarithmic noise-speed relationships require deeper cuts to achieve ≈5 dB reduction.)
+    buffer_time_s: 0.85 -> 1.0 (The compressed buffer of 0.85 s increases pipeline pressure, forcing both the human operator and robots to work in a tighter rhythm that compounds fatigue and can create acoustic peaks from rushed handoffs. Restoring buffer to 1.0 s relieves this pressure, providing a secondary noise and fatigue reduction that reinforces fixes 1 and 2, and improves schedule robustness against transient overloads. The throughput penalty is partially offset by the cycle-rate reduction already reducing throughput.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 20% demand surge has produced a schedule that simultaneously violates two human-centric worker-safety constraints: FatigueIndex reaches 0.6001 against a hard ceiling of 0.40 (excess: +0.2001, or 50% over limit) and ambient Noise reaches 84.9 dB against a ceiling of 80.0 dB (excess: +4.9 dB, or 6.1% over limit). Both violations pose direct worker-health and regulatory-compliance risks. The schedule has been automatically rejected by the CBPA governance layer and cannot proceed without an authorized managerial decision to either expand production capacity or selectively relax one or both constraints under documented compensatory controls.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Add a Second Production Shift to Absorb the Demand Surge: Introduce a second shift to redistribute the 20% incremental demand across additional labor hours. Splitting the workload reduces per-worker fatigue accumulation, bringing FatigueIndex back below 0.40, and lowers sustained machine utilization intensity, which reduces average noise exposure below 80.0 dB. Neither human-centric constraint is relaxed. A minor scheduling and onboarding lag is expected to create a 4% deadline gap in the first planning cycle only; subsequent cycles should be fully compliant.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Relax Noise Ceiling to 85.0 dB with Mandatory PPE, and Enforce Task Rotation to Control Fatigue: Formally raise the operational Noise ceiling to 85.0 dB (within short-term OSHA permissible exposure levels for PPE-equipped workers) and mandate full hearing-protection PPE across all affected stations. Simultaneously, implement a structured task-rotation schedule to keep FatigueIndex at or below 0.40 without adding headcount. This combination meets full demand with no deadline gap. Only the Noise constraint is relaxed; FatigueIndex is preserved through scheduling discipline. Requires documented engineering controls and PPE compliance audit.
+      Preserves human constraints: No
+    - Option 3 (Last Resort): Temporary Waiver Relaxing Both FatigueIndex to 0.50 and Noise to 85.0 dB with Enhanced Compensatory Protocol: Issue a time-limited managerial waiver raising FatigueIndex ceiling to 0.50 and Noise ceiling to 85.0 dB. Required compensatory controls: (1) mandatory 15-minute rest breaks every 90 minutes per worker, (2) full PPE including hearing protection and fatigue-monitoring wearables, (3) daily end-of-shift health check-ins, and (4) automated real-time monitoring alerts if either metric exceeds the relaxed threshold. Full demand is met immediately with zero deadline gap, but elevated worker-health risk is accepted and documented managerial sign-off with a named expiry date is mandatory. Both human-centric constraints are relaxed.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:27:42,171 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:27:42,171 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:27:42,171 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] No learning bias (first shift — no prior experience)
+
+  [L5] Adaptation reasoning: macro
+    Insight: A 100% FatigueIndex violation combined with zero feasibility probability means no local perturbation can find a feasible region — the solution lies outside the current schedule's neighborhood, requiring a global replan.
+
+  [L2] 10 balanced S3 variants generated
+    Pareto front: [balanced_baseline, human_paced_low_noise, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 1)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +20.0%
+
+  [L4] S3 DEPLOYED | Throughput=26.3 u/h | V/R=0.390 | P(feasible)=100%
+2026-09-05 23:28:13,974 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:28:13,975 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 210
+    Throughput:     26.3 u/h
+    Defect rate:    0.0072
+    Fatigue index:  0.2161
+    Noise:          77.3 dB
+    Energy:         335.0 kWh
+    Deadline gap:   57.9%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.3 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.3 (threshold 75.0) -> warn
+2026-09-05 23:28:13,975 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:28:31,203 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:28:31,203 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:28:31,203 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:28:31,206 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:28:31,207 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:28:31,207 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:28:31,231 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:29:31,896 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:29:31,896 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:29:31,896 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        delivered_value_per_resource_consumed (maximize), operator_fatigue (minimize), noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. priority_order vs _raw_priority_order
+       Q: The compiled contract lists only 'HumanWellbeing' as the priority order, but the raw priority order puts delivered_value_per_resource_consumed first and fatigue second — should the optimiser treat fatigue and noise purely as hard constraints and maximise efficiency as its sole objective, or should it also lexicographically prefer lower fatigue over higher efficiency whenever both are technically feasible?
+       A: Treat fatigue ≤ 0.4 and noise ≤ 80 dB as strictly binding hard constraints only; maximise delivered_value_per_resource_consumed as the sole optimisation objective within the feasible region.
+    2. delivered_value_per_resource_consumed.threshold
+       Q: The efficiency KPI has no upper bound or satisficing target — if the optimiser can raise delivered value by, say, 35% but only by sustaining fatigue at 0.39 and noise at 79.8 dB throughout the entire shift, is that acceptable, or should a target efficiency gain (e.g., ≥ 15% above shift baseline) define a 'good enough' threshold beyond which operator comfort takes precedence?
+       A: No efficiency cap or satisficing threshold is applied; the optimiser maximises the ratio freely subject only to the two hard constraints.
+    3. resource_consumption composite weighting
+       Q: The KPI denominator combines energy, direct labour-hours, and raw materials into a single 'resource_units' figure — what normalisation or weighting method should be used to aggregate these heterogeneous inputs (e.g., monetary cost at current shift prices, primary-energy equivalence in kWh, or equal physical-unit weighting), since different choices can shift the optimal solution by more than 20%?
+       A: Aggregate all resource inputs using their monetary cost at the shift's contracted rates (energy tariff, labour rate, material price), yielding a cost-based efficiency ratio.
+    4. context.time_horizon (shift_duration)
+       Q: The shift duration is listed only as 'shift_duration' without a concrete value — since fatigue accumulates over time, the cycle rate that keeps operator fatigue ≤ 0.4 at hour 6 of an 8-hour shift differs substantially from that of a 12-hour shift; what is the planned shift length in hours?
+       A: Assume a standard 8-hour shift; the fatigue model and all time-integrated constraints are scaled to a 480-minute horizon.
+    5. noise_level measurement method
+       Q: Is the 80 dB noise ceiling an instantaneous peak limit (no single moment may exceed 80 dB) or an equivalent continuous A-weighted level (LAeq) averaged over the full shift, given that high-intensity short production bursts could satisfy the LAeq criterion while repeatedly breaching an instantaneous limit — and the optimiser's feasible set changes substantially depending on which interpretation applies?
+       A: Apply the 80 dB limit as the shift-averaged LAeq in accordance with the stated noise_measurement assumption; instantaneous exceedances during brief tool cycles are permissible provided the shift average remains at or below 80 dB.
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 4 non-dominated [Balanced Moderate, Fatigue-First, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:29:49,070 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:29:49,071 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:29:49,071 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +15.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +15.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 59.8 (+15.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 59.8 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+  [LLM FALLBACK] Planning: 2 validation errors for Schedule
+r1_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.2, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal
+r2_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.18, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal -> using deterministic
+2026-09-05 23:30:42,804 cbpa.layer2_planning.plan_generator [WARNING] LLM planning failed: 2 validation errors for Schedule
+r1_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.2, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal
+r2_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.18, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal, falling back to deterministic
+2026-09-05 23:30:42,805 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2a_det'
+2026-09-05 23:30:42,805 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2a_det forward flagged
+  [L2] 6 aggressive S2 variants generated
+    Pareto front: 3 non-dominated [S2a_det, S2c_det, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+15.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+15.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.77 (Fatigue index (0.6001) exceeds the hard ceiling of 0.4 by 0.2001. Fatigue scales approximately proportionally with human cycle rate multiplier. Solving proportionally: target = 1.15 × (0.4 / 0.6001) ≈ 0.767, rounded to 0.77. This is the primary binding constraint — reducing the human workload rate is the only direct lever that reduces fatigue without depending on robot changes.)
+    r2_speed_fraction: 1.0 -> 0.75 (Noise of 84.9 dB exceeds the 80.0 dB limit by 4.9 dB. R2 is the only robot operating at maximum speed (1.0) and is therefore the dominant controllable noise source. Robot mechanical noise scales super-linearly with speed (approximately speed^2 to speed^3 for aerodynamic and impact noise), so a 25% speed reduction produces a disproportionately larger dB reduction. R1 is already at 0.9, so R2 reduction is the minimal targeted intervention.)
+    buffer_time_s: 1.0 -> 2.0 (The combined reductions in human_cycle_rate_multiplier and R2 speed will lower throughput from 48.1 uph. Increasing buffer time from 1.0 s to 2.0 s provides inter-station slack that smooths pipeline stalls and partially recovers effective utilization without raising robot speed or human rate. The added slack also reduces real-time pacing pressure on the operator, offering a secondary fatigue benefit beyond the direct multiplier adjustment.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 15.0% demand surge has caused the generated schedule to simultaneously violate two human-centric safety constraints, rendering it infeasible for execution. The Fatigue Index reached 0.6001 against a hard ceiling of 0.40 (excess: +0.2001), and the operational Noise level reached 84.9 dB against a limit of 80.0 dB (excess: +4.9 dB). No schedule exists under current resource assumptions and constraint ceilings that can satisfy the elevated demand volume. Managerial authorization and at least one remediation action are required before production can resume at the requested output level.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Redistribute Load Across an Additional Shift: Split the incremental demand across one additional production shift and cross-train available personnel to cap per-shift workload intensity. Engage pre-approved temporary contractors for peak-load hours to keep both FatigueIndex and Noise within their existing hard limits. Demand fulfillment is estimated at approximately 88% of the new target in the immediate term, with full capacity reachable within 5 business days once shift scheduling and onboarding are finalized. No constraint ceilings are altered; all existing human-centric protections remain in force.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Engineering Noise Controls + Limited Supervised Overtime: Deploy acoustic dampening panels at primary noise sources and mandate SNR-25 earmuffs for all floor personnel, reducing effective worker noise exposure and permitting a temporary operational noise ceiling of 83.0 dB for a defined review period (max 14 calendar days). Authorize limited supervised overtime to partially address the fatigue shortfall, capping FatigueIndex at 0.50 with mandatory compensatory rest periods enforced daily by the shift supervisor. An HSE review checkpoint is required at day 7. Estimated demand fulfillment: approximately 95% of the new target.
+      Preserves human constraints: No
+    - Option 3 (Last Resort): Dual-Constraint Temporary Relaxation Under HSE Oversight Protocol: Temporarily raise the FatigueIndex ceiling to 0.55 and the Noise ceiling to 85.0 dB under a mandatory occupational health oversight protocol. Required safeguards include: daily fatigue scoring reviewed by a line manager, mandatory job-rotation every 90 minutes, audiometric spot-checks at shift start and end, and a posted incident escalation hotline. This option requires written co-authorization from the HSE Officer and the worker representative before activation. Duration must not exceed 10 consecutive working days, after which constraints revert automatically. Full demand can be met immediately, but carries elevated and formally acknowledged worker health risk that must be documented in the site safety register.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:32:54,393 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:32:54,393 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:32:54,394 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 2 prior experience(s):
+    Avoid:  ['S2']
+    Prefer: ['S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: meso
+    Insight: Dual constraint collapse with 0% feasibility under +15% demand surge is a policy alignment failure, not a parameter tuning problem. Prior experience showing S3 acceptance over S2 rejection points to a robust policy family switch (MESO) as the minimally sufficient intervention before escalating to MACRO.
+    Synthesis: With only one observation, the pattern is tentative: S3 satisfies demand_surge conditions while S2 is deterministically ruled out by ergonomic/noise constraints (Fatigue > 0.4, Noise > 80dB). S3 achieved a throughput of 26.3 uph and a deadline gap of 57.9%, indicating comfortable schedule headroom. Until more samples are collected, prefer S3 as the default policy for demand_surge, and avoid S2 without first verifying fatigue and noise levels fall within safe bounds.
+
+  [L2] 9 balanced S3 variants generated
+    Pareto front: [C2-BAL-A, C2-BAL-C, C2-BAL-D, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=96% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 3)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +15.0%
+
+  [L4] S3 DEPLOYED | Throughput=37.7 u/h | V/R=0.424 | P(feasible)=96%
+2026-09-05 23:33:45,169 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:33:45,170 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 301
+    Throughput:     37.7 u/h
+    Defect rate:    0.0078
+    Fatigue index:  0.3619
+    Noise:          76.9 dB
+    Energy:         413.0 kWh
+    Deadline gap:   37.0%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.9 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.9 (threshold 75.0) -> warn
+2026-09-05 23:33:45,170 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:34:05,608 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:34:05,608 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:34:05,608 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:34:05,610 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:34:05,610 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:34:05,611 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:34:05,640 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:35:11,003 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:35:11,003 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:35:11,003 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue (upper_bound), noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. priority_order vs context._raw_priority_order
+       Q: Should the optimiser treat fatigue and noise as hard lexicographic gates that must be satisfied before efficiency is touched at all, or are all three KPIs traded off simultaneously with human-wellbeing weighted most heavily (e.g. a 10 % efficiency gain that pushes fatigue to 0.39 is acceptable)?
+       A: Lexicographic priority is enforced: hard constraints on fatigue (≤ 0.4) and noise (≤ 80 dB) must be satisfied first; resource_efficiency is maximised only within the remaining feasible region.
+    2. resource_efficiency (maximize, threshold: null)
+       Q: Is there a maximum operating intensity — such as a line-speed or cycle-rate ceiling — beyond which you would not push even if efficiency kept improving (e.g. no more than 115 % of rated throughput), or do you rely solely on the fatigue and noise constraints as the implicit ceiling?
+       A: No explicit throughput ceiling is added; the hard fatigue and noise bounds are treated as the sole implicit upper limit on operating intensity, with a post-run flag if optimal speed exceeds 110 % of rated capacity.
+    3. context.resource_types_in_scope (aggregation weights for energy, labor_time, raw_materials)
+       Q: What cost weights should be used when collapsing energy, labour time, and raw materials into the single resource-consumed denominator — equal normalised shares (1/3 each), or site-specific cost ratios such as energy 40 %, labour 40 %, materials 20 %?
+       A: Equal normalised weights (1/3 each) are applied by default; a sensitivity run with cost-proportional weights is flagged for manager review after the first completed schedule.
+    4. assumptions.fatigue_measurement_method (physiological_or_self_report)
+       Q: Will fatigue be tracked by a continuous physiological sensor (e.g. HRV wristband) or by periodic self-report — given that self-report typically lags 15–30 min, should the hard constraint be tightened to ≤ 0.35 when only self-report data are available to prevent late-detected violations?
+       A: Continuous physiological monitoring is assumed; if unavailable at shift start, the hard constraint is automatically tightened to ≤ 0.35 to compensate for measurement lag.
+    5. assumptions.noise_measurement_standard (Leq vs instantaneous peak)
+       Q: Does the 80 dB limit apply to the 8-hour A-weighted equivalent continuous level (LAeq,8h) or to instantaneous measurements — intermittent press or stamping events may satisfy an 8-hour Leq while repeatedly exceeding 80 dB peak for minutes at a time?
+       A: The limit is applied as an 8-hour LAeq,8h; instantaneous peaks are logged but do not halt optimisation unless they exceed 135 dB (acute hearing-damage threshold per ISO 9612).
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 4 non-dominated [Energy_Conservative, Low_Fatigue_Priority, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:35:27,107 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:35:27,107 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:35:27,108 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +25.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +25.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 65.0 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:36:20,128 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2d_det'
+2026-09-05 23:36:20,128 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2d_det forward flagged
+  [L2] 9 aggressive S2 variants generated
+    Pareto front: 4 non-dominated [balanced_fast, throughput_aggressive, efficiency_focused_fast, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+25.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+25.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.8 (FatigueIndex of 0.6001 exceeds the 0.40 limit by 0.2001 — a 33% overrun. Fatigue accumulates roughly linearly with human cycle rate; reducing the multiplier from 1.15 to 0.80 (a 30% cut) projects FatigueIndex to approximately 0.42, just inside the constraint. This is the primary binding fix because fatigue cannot be addressed by any robot or buffer parameter.)
+    r2_speed_fraction: 1.0 -> 0.75 (Noise at 84.9 dB exceeds the 80.0 dB limit by 4.9 dB. R2 is running at full speed (1.0), making it the dominant noise source. Mechanical noise scales with drive speed raised to an exponent (typically 3–5 for rotating machinery), so a 25% speed reduction on R2 yields a disproportionately large noise reduction — estimated 5–7 dB — sufficient to clear the 80 dB ceiling. R1 is already at 0.9 so marginal benefit of reducing it further is smaller; R2 is the better lever.)
+    buffer_time_s: 0.85 -> 1.05 (Reducing human_cycle_rate_multiplier and r2_speed_fraction will reduce raw throughput. Increasing buffer_time_s from 0.85 to 1.05 smooths pipeline starvation and allows the slower stations to sustain higher utilisation without creating WIP backlogs, partially recovering the throughput loss. This is a secondary compensating adjustment, not a constraint fix itself, but it prevents the schedule from falling below the throughput floor after the two speed reductions.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 25.0% demand surge has produced a schedule that violates two human-centric constraints simultaneously. The Fatigue Index reached 0.6001 against a hard ceiling of 0.40 (excess: +0.2001), and the shop-floor Noise level reached 84.9 dB against a ceiling of 80.0 dB (excess: +4.9 dB). Because both margins are negative, no feasible schedule exists under current resource and constraint configurations that satisfies demand in full. Unilateral relaxation of either constraint without compensatory controls would expose workers to elevated health and safety risk. Production manager decision required before rescheduling can proceed.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 — Workforce Augmentation with Staggered Shifts (Preferred): Bring in supplemental operators (temporary staff or cross-trained personnel from adjacent cells) and restructure shifts into shorter, staggered rotations. Distributing the additional 25% workload across more workers reduces per-person fatigue exposure and, by avoiding simultaneous peak-machine operation, lowers aggregate noise levels. No constraint limits are modified. Lead time to implement: 1–2 days for staffing coordination. Recommended as first response because it closes the demand gap without any relaxation of human-centric limits.
+      Preserves human constraints: Yes
+    - Option 2 — Targeted Noise Mitigation + Workload Redistribution (Moderate Risk): Deploy acoustic enclosures or damping panels on the highest-noise machines and mandate ANSI-rated hearing protection for the surge period, then raise the operational Noise ceiling to 82.0 dB as an interim limit. Simultaneously redistribute task sequences to cap individual FatigueIndex at 0.40 by inserting mandatory 10-minute micro-breaks every 90 minutes. This combination addresses the Noise violation with an engineered control while holding the FatigueIndex constraint firm. The Noise limit relaxation is time-bounded to the surge window and requires a post-surge audit. Expected delivery gap narrows to roughly 2%.
+      Preserves human constraints: No
+    - Option 3 — Time-Bounded Dual-Constraint Relaxation with Enhanced Monitoring (Last Resort): Temporarily raise the FatigueIndex ceiling to 0.65 and the Noise ceiling to 85.0 dB for a defined surge window (not to exceed 5 consecutive working days). Mandatory conditions: continuous real-time biometric fatigue monitoring with automatic work-stop alerts, full PPE compliance audits every shift, and a compensatory recovery schedule (reduced hours, no overtime) in the week immediately following the surge. Both limits revert to original values at surge-window close. This option fulfils 100% of demand but carries elevated worker health risk and must be formally approved by the safety officer and documented as a temporary deviation in the CBPA governance log.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:37:52,457 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:37:52,457 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:37:52,458 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 4 prior experience(s):
+    Avoid:  ['S2', 'S2']
+    Prefer: ['S3', 'S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: macro
+    Insight: Prior learning is decisive: MESO (S2) failed twice in structurally identical situations while MACRO (S3) succeeded twice; combined with 0% feasibility and a fully saturated FatigueIndex, the binding constraint is intrinsically hard under current conditions and requires a fresh L1-L2 replan to reallocate resources at the planning horizon level.
+    Synthesis: S2 is deterministically rejected under demand_surge conditions due to hard ergonomic and acoustic constraint violations (Fatigue > 0.4, Noise > 80dB); these are non-negotiable limits that make S2 structurally incompatible with surge scenarios. S3 succeeded in both attempts with satisfaction confirmed, delivering throughput in the range 26.3–37.7 uph and a deadline gap of 37.0–57.9%. The improving trend across attempts (throughput +11.4 uph, deadline gap -20.9 pp) may indicate learning or context improvement, but cannot be confirmed with only 2 samples. Planners should default to S3 for demand_surge and avoid S2 entirely. Confidence is limited by the very small sample size.
+
+  [L2] 9 balanced S3 variants generated
+    Pareto front: [S3-Balanced, S3-Conservative, S3-Asymmetric, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 5)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +25.0%
+
+  [L4] S3 DEPLOYED | Throughput=30.1 u/h | V/R=0.395 | P(feasible)=100%
+2026-09-05 23:38:51,235 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:38:51,235 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 240
+    Throughput:     30.1 u/h
+    Defect rate:    0.008
+    Fatigue index:  0.2986
+    Noise:          79.4 dB
+    Energy:         367.0 kWh
+    Deadline gap:   53.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.4 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.4 (threshold 75.0) -> warn
+2026-09-05 23:38:51,235 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:39:10,813 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:39:10,814 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:39:10,814 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:39:10,819 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:39:10,819 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:39:10,820 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+  [run 08] ok in 949.3s; LLM calls=35 exceptions=0 empty=0 schema_invalid=0 fallbacks=2 llm_warnings={'contract_repair': 54, 'fallback': 2}
+
+======================================================================
+  RUN 09 / 9   (single, LLM)
+======================================================================
+2026-09-05 23:39:10,857 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+2026-09-05 23:39:10,886 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:40:22,251 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:40:22,251 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:40:22,251 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue (upper_bound), noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. priority_order vs. multi_objective_resolution
+       Q: Should human-wellbeing constraints (fatigue ≤ 0.4, noise ≤ 80 dB) take absolute lexicographic precedence over resource_efficiency as the primary optimisation objective, or should resource_efficiency be maximised first with wellbeing enforced solely as hard constraints? The contract's priority_order lists only 'HumanWellbeing', yet the multi_objective_resolution assumption says 'maximize resource_efficiency first'—these two directives directly contradict each other and will produce different schedules.
+       A: Treat fatigue and noise exclusively as hard constraints (already duplicated in hard_constraints) and maximise resource_efficiency as the single unconstrained KPI objective, resolving the contradiction in favour of the stated optimisation direction.
+    2. resource_efficiency.threshold (no minimum target or saturation ceiling)
+       Q: Is there a minimum acceptable efficiency gain over the previous shift (e.g., +5 %) or a saturation ceiling above which further gains are not required? Without either bound, the optimiser will push operators and machines to the fatigue and noise limits for every marginal efficiency gain, even when returns are negligible—e.g., a 0.1 % efficiency improvement achieved by running at fatigue index 0.39 continuously for 8 hours.
+       A: No ceiling applied; optimiser maximises resource_efficiency freely subject to hard constraints. Previous-shift average is used as the reference baseline per the existing assumption.
+    3. resource_efficiency aggregation (value_dimensions and resource_dimensions weights)
+       Q: How should the three value dimensions (units_produced, quality_weighted_output, on_time_delivery) and four resource dimensions (energy, raw_materials, labor_hours, machine_time) be weighted in the single efficiency ratio? Different weightings produce fundamentally different optima—e.g., if energy is cheap but labour is scarce, the optimiser might substitute machine-time for labour-hours in a way the manager did not intend.
+       A: Equal normalised weighting applied across all value and resource dimensions; if a cost table from the previous accounting period is available it is used instead to convert all dimensions to a common monetary unit before computing the ratio.
+    4. operator_fatigue (fatigue_measurement_frequency vs. hard constraint enforcement granularity)
+       Q: Does the fatigue hard constraint of ≤ 0.4 apply to the 15-minute rolling average only, or must the instantaneous fatigue index also never exceed 0.4 at any moment? Using only the rolling average allows burst-load sequences where fatigue spikes to ~0.6–0.7 for several minutes while the rolling average stays compliant, which may defeat the intent of the ergonomic guideline.
+       A: Constraint enforced on the 15-minute rolling average only, consistent with the existing fatigue_measurement_frequency assumption; no separate instantaneous peak constraint is imposed.
+    5. noise_level (temporal measurement basis: instantaneous ceiling vs. time-weighted average)
+       Q: Is the 80 dB(A) limit a continuous instantaneous ceiling that must never be exceeded at any operator station at any moment, or a time-weighted average over the shift (as in EU Directive 2003/10/EC Lex,8h), which would permit brief spikes above 80 dB during changeovers or maintenance bursts as long as the shift-average stays compliant?
+       A: Treated as a continuous instantaneous ceiling (no exceedance at any moment at any operator station), which is the more conservative interpretation and consistent with the hard_constraints encoding; this may rule out certain changeover procedures that the Directive's time-weighted standard would otherwise permit.
+
+  [L2] Generated 9 candidate schedules
+    Pareto front: 4 non-dominated [conservative_baseline, comfort_first, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:40:40,744 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:40:40,745 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:40:40,745 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +20.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +20.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 62.4 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:41:42,646 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2d_det'
+2026-09-05 23:41:42,647 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2d_det forward flagged
+  [L2] 10 aggressive S2 variants generated
+    Pareto front: 4 non-dominated [balanced_aggressive, r1_dominant_fast, human_augmented_surge, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+20.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+20.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.85 (FatigueIndex of 0.6001 exceeds the hard limit of 0.4 by 0.2001 (~33% over limit). The human_cycle_rate_multiplier is the direct driver of operator fatigue — at 1.15x it requires the human to pace ~15% faster than nominal, which compounds cumulative fatigue load. Reducing to 0.85 (a 0.30 step) cuts the pace-driven fatigue component significantly; assuming roughly linear scaling of fatigue with cycle rate above a base load, this reduction is expected to bring FatigueIndex below 0.4. This is the smallest single-lever fix for the binding fatigue constraint with minimal impact on robot-side throughput.)
+    r2_speed_fraction: 1.0 -> 0.82 (Noise at 84.9 dB exceeds the 80.0 dB limit by 4.9 dB. r2 is the dominant noise source because it operates at full rated speed (1.0), and acoustic power scales with a high exponent of rotational/linear velocity (often 4th–6th power for mechanical sources, or ~20 log10(speed) for tonal components). Reducing r2 from 1.0 to 0.82 (18% speed reduction) is expected to yield approximately 3–4 dB of noise reduction at the r2 station alone — the largest marginal gain available from a single parameter change. This is prioritized over r1 because r2 is currently at its peak noise-generating operating point.)
+    r1_speed_fraction: 0.9 -> 0.78 (If r2 reduction alone yields only ~3.5 dB (leaving noise at ~81.4 dB), an additional reduction of r1 from 0.9 to 0.78 provides a supplementary ~2 dB of noise reduction to ensure the 80 dB constraint is met with margin. r1 at 0.9 is already below maximum but still contributes meaningfully to plant-floor noise accumulation. Reducing by 0.12 is the minimal step needed to close the residual gap after r2 adjustment. Together, both speed reductions provide a combined ~5.5–6.5 dB reduction, clearing the 4.9 dB required margin with buffer for measurement uncertainty.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 20% demand surge has rendered the current production schedule infeasible under active human-centric constraints. Two violations are recorded: (1) FatigueIndex reached 0.6001 against a hard ceiling of 0.40 — a margin breach of -0.2001, representing a 50% overshoot that poses significant ergonomic and safety risk to operators; (2) Noise level reached 84.9 dB against a ceiling of 80.0 dB — a margin breach of -4.9 dB, exceeding occupational exposure guidance and creating potential long-term hearing damage risk. The CBPA scheduler correctly rejected this schedule and has escalated for human decision authority. No autonomous relaxation has been applied. All three remediation options below are ranked by degree of constraint preservation, from fully compliant to partially waived.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Capacity Augmentation via Shift Expansion: Add a rotating third shift or engage certified contract labor to distribute the incremental 20% demand load across additional production hours. By spreading workload across more workers and time windows, both the FatigueIndex and Noise exposure per-worker-shift return within compliant bounds without modifying any constraint limit. Requires HR coordination and a 3–5 day ramp-up for onboarding and safety induction. This is the only option that fully preserves worker welfare guarantees.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Noise Engineering Controls with Targeted Limit Relaxation: Install acoustic dampening panels at high-noise workstations and mandate Class-E hearing protection (SNR ≥ 27 dB) for all affected operators, then raise the Noise scheduling ceiling to 85.0 dB to align with the OSHA 8-hour PEL. This addresses the Noise violation but does not resolve the FatigueIndex breach, leaving a residual capacity gap. Recommended only if Option 1 staffing cannot be secured in time. A formal engineering control audit must be completed within 30 days.
+      Preserves human constraints: No
+    - Option 3 (Last Resort): Time-Bound Dual-Constraint Waiver with Mandatory Compensatory Rest: Issue a formal 4-week production waiver raising the FatigueIndex ceiling to 0.50 and the Noise ceiling to 85.0 dB simultaneously. To partially offset health impact, mandate one additional rest day per worker per week during the waiver period and schedule audiometric testing at waiver expiry. This closes the full demand gap but constitutes a deliberate, documented departure from human-centric constraint policy and requires sign-off from the site HSE officer and plant manager. The waiver must not be renewed without a root-cause review.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:43:39,926 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:43:39,926 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:43:39,926 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] No learning bias (first shift — no prior experience)
+
+  [L5] Adaptation reasoning: macro
+    Insight: The fatigue-demand conflict is intrinsic: a +20% demand surge forces higher utilization, which is the direct cause of the 100% FatigueIndex violation; no within-family parameter adjustment can simultaneously satisfy both, necessitating a ground-up replan that can redefine the feasibility region.
+
+  [L2] 10 balanced S3 variants generated
+    Pareto front: [balanced_baseline, fatigue_safe, noise_aware_balanced, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=96% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 1)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +20.0%
+
+  [L4] S3 DEPLOYED | Throughput=33.2 u/h | V/R=0.415 | P(feasible)=96%
+2026-09-05 23:44:33,613 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:44:33,613 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 265
+    Throughput:     33.2 u/h
+    Defect rate:    0.0078
+    Fatigue index:  0.293
+    Noise:          79.7 dB
+    Energy:         368.0 kWh
+    Deadline gap:   46.9%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.7 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.7 (threshold 75.0) -> warn
+2026-09-05 23:44:33,613 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:44:56,669 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:44:56,670 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:44:56,670 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:44:56,673 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:44:56,674 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:44:56,674 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:44:56,698 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:46:00,069 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:46:00,069 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:46:00,070 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        delivered_value_per_resource_consumed (maximize), operator_fatigue (upper_bound), noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. delivered_value_per_resource_consumed (maximize, no upper bound)
+       Q: Is there a maximum acceptable production pace or throughput multiplier beyond which the shift becomes undesirable even if fatigue and noise constraints are technically met — for example, should pace never exceed 115% of the nominal shift-plan rate?
+       A: Cap the optimizer's allowed production pace at 115% of the shift-plan nominal rate; this prevents the ratio-maximisation objective from simultaneously saturating all wellbeing hard constraints while remaining technically feasible.
+    2. operator_fatigue / hard_constraint limit 0.4
+       Q: Is the 0.4 fatigue limit a real-time ceiling that must never be breached at any single moment during the shift, or an end-of-shift cumulative target — and should the optimizer aim for a comfortable working level (e.g. ≤ 0.30) rather than driving operators to the legal boundary of 0.4?
+       A: Treat 0.4 as a real-time instantaneous ceiling and set a soft optimization target of ≤ 0.30 to preserve margin; the hard constraint at 0.4 remains the feasibility boundary throughout the shift.
+    3. primary_metric_definition — labor in resource denominator vs. scheduled breaks
+       Q: Since labor cost appears in the resource-consumption denominator, can the optimizer reduce break frequency or shorten rest periods to lower effective labor cost per unit and improve the ratio — or are scheduled break durations fixed and excluded from the decision space?
+       A: Scheduled breaks and mandatory rest periods are treated as fixed; only task allocation, machine pace, and energy use are optimizable, preventing the optimizer from eroding rest time to inflate the efficiency ratio.
+    4. output_quality in primary_metric_definition (no lower bound defined)
+       Q: What is the minimum acceptable quality yield below which delivered value should be penalized or treated as zero — for example, must quality yield stay above 90% of the shift-plan target at all times?
+       A: Apply a quality yield floor of 85% of the shift-plan nominal; output batches below this threshold contribute zero delivered value to the ratio numerator, preventing the optimizer from accepting a low-quality high-throughput solution.
+    5. noise_level / 80 dB threshold — instantaneous vs. Leq averaging
+       Q: Is the 80 dB limit an instantaneous ceiling (no single reading may exceed 80 dB at any moment) or an A-weighted equivalent continuous level averaged over the full shift — since Leq averaging permits brief peaks above 80 dB that an instantaneous cap would forbid?
+       A: Apply 80 dB as a continuous instantaneous ceiling at the operator workstation (both Leq and any momentary reading must remain ≤ 80 dB), which is the more protective interpretation and avoids requiring detailed peak-noise modelling.
+
+  [L2] Generated 8 candidate schedules
+    Pareto front: 4 non-dominated [Conservative Comfort, Balanced Moderate, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:46:19,899 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:46:19,899 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:46:19,900 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +15.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +15.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 59.8 (+15.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 59.8 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+2026-09-05 23:47:10,644 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2a_det'
+2026-09-05 23:47:10,644 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2a_det forward flagged
+  [L2] 10 aggressive S2 variants generated
+    Pareto front: 5 non-dominated [NoiseCapped_FastPush, PhasedSurge_FastPush, S2a_det, S2c_det, S2d_det]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+15.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+15.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.85 (FatigueIndex is 0.6001, violating the <=0.4 hard limit by 0.200 (50% overshoot). The human_cycle_rate_multiplier is the direct driver of operator fatigue — it sets the pace at which physical repetitive work accumulates. Reducing it from 1.15 to 0.85 (a 26% reduction in the above-baseline demand) should bring the fatigue index down from ~0.60 to approximately 0.38–0.42, near or just inside the limit. This is the smallest single-parameter change that targets the binding fatigue constraint without touching robot speeds.)
+    r2_speed_fraction: 1.0 -> 0.76 (Noise is 84.9 dB, violating the <=80.0 dB limit by 4.9 dB. r2 is currently running at maximum speed (1.0), making it the dominant noise source; r1 is already throttled to 0.9. Robot mechanical noise scales roughly as 10*log10(speed^2) relative to rated speed. To achieve a ~5 dB reduction, r2 speed must drop by approximately sqrt(10^(5/10)) ≈ factor of ~1.78 in power terms, implying speed fraction near 0.75–0.78. Reducing r2 from 1.0 to 0.76 targets the binding noise constraint with minimal throughput impact because r2's contribution can be partially offset by pipeline buffering.)
+    buffer_time_s: 1.0 -> 2.5 (Both the human cycle rate reduction and r2 speed reduction will lower throughput from the current 48.1 UPH. Increasing buffer time from 1.0 s to 2.5 s smooths inter-station pipeline flow when upstream (human) and downstream (r2) stations now operate at different reduced rates, preventing starvation-induced micro-stoppages that would further degrade effective UPH. This is a compensating adjustment, not a constraint fix, and has negligible noise/fatigue impact while partially recovering lost throughput.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 15.0% demand surge has rendered the current production schedule infeasible under active human-centric constraints. Two violations are recorded: (1) FatigueIndex reached 0.6001, exceeding the 0.40 ceiling by +0.2001 (50.0% over limit), indicating unacceptable cumulative worker fatigue risk; (2) Occupational noise exposure reached 84.9 dB, exceeding the 80.0 dB ceiling by +4.9 dB, breaching hearing-safety thresholds. Both constraints are human-welfare constraints and cannot be silently overridden. Immediate manager decision is required before any schedule can be committed. The three ranked remediation options below are ordered from most conservative (full constraint preservation) to most permissive (targeted constraint relaxation with compensating controls).
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended) — Accept Partial Demand Fulfillment, Preserve All Constraints: Cap production at the throughput level that keeps FatigueIndex <= 0.40 and Noise <= 80.0 dB. The resulting output deficit (~13%) is managed via delivery-date negotiation with downstream customers or safety-stock draw-down. No human-centric constraint is relaxed. This is the safest option and maintains full regulatory compliance.
+      Preserves human constraints: Yes
+    - Option 2 — Controlled Noise Relaxation with Mandatory PPE Protocol: Temporarily raise the Noise ceiling to 85.0 dB (the OSHA 8-hour TWA permissible limit) contingent on verified use of mandatory hearing-protection equipment (minimum NRR-25 earmuffs) for all floor personnel, logged per shift. FatigueIndex constraint remains hard at 0.40, limiting available shift extension. This closes roughly 60% of the demand gap while containing fatigue risk. A compensating-control audit must be completed within 48 hours.
+      Preserves human constraints: No
+    - Option 3 (Last Resort) — Fatigue Index Relaxation with Mandatory Micro-Rest Protocol: Raise the FatigueIndex ceiling to 0.55 (a 37.5% increase) and the Noise ceiling to 85.0 dB simultaneously, subject to a mandatory compensating-control package: (a) 15-minute mandatory rest breaks every 90 minutes of continuous work, (b) real-time wearable fatigue monitoring with automatic line-stop authority, and (c) post-shift health checks for all affected workers. This option can close the full demand gap but carries the highest human-welfare risk and requires documented manager sign-off and union/safety-officer notification before activation.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:48:35,915 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:48:35,915 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:48:35,915 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 2 prior experience(s):
+    Avoid:  ['S2']
+    Prefer: ['S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: meso
+    Insight: Prior experience explicitly rejected S2 and accepted S3 in a comparable disturbance context, providing direct evidence that a MESO-level policy family switch (e.g., pivoting to a fatigue-aware robust policy such as S3) resolves the feasibility gap without the cost of full L1-L2 replanning.
+    Synthesis: For demand_surge disturbances, policy S3 satisfied all constraints and achieved acceptable throughput (33.2 uph) with a comfortable deadline buffer (46.9% gap). Policy S2 was deterministically rejected due to ergonomic and noise constraint violations (Fatigue > 0.4, Noise > 80dB), suggesting S2 pushes workers too hard under surge conditions. Prefer S3 as the default surge-response policy, but note that with only one sample the parameter ranges are point estimates and cannot yet distinguish whether S3 succeeds reliably or was simply fortunate in this instance.
+
+  [L2] 10 balanced S3 variants generated
+    Pareto front: [S3-Balanced-Core, S3-Conservative-Safe, S3-R1-Priority, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 3)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +15.0%
+
+  [L4] S3 DEPLOYED | Throughput=32.1 u/h | V/R=0.410 | P(feasible)=100%
+2026-09-05 23:49:31,521 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:49:31,522 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 257
+    Throughput:     32.1 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.2867
+    Noise:          79.0 dB
+    Energy:         362.0 kWh
+    Deadline gap:   46.2%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.0 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.0 (threshold 75.0) -> warn
+2026-09-05 23:49:31,522 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:49:49,687 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:49:49,687 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:49:49,687 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+2026-09-05 23:49:49,687 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:49:49,689 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:49:49,689 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:49:49,689 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+2026-09-05 23:49:49,689 cbpa.layer3_verification.constraint_checker [WARNING] hard constraint 'shift_duration' does not map to a monitored metric and is NOT checked; canonicalise it at Layer 1
+2026-09-05 23:49:49,719 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+2026-09-05 23:50:59,403 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:50:59,403 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:50:59,403 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [L1] Contract C1 elicited:
+    KPIs:        resource_efficiency (maximize), operator_fatigue_index (upper_bound), ambient_noise_level (upper_bound)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0
+    Priorities:  HumanWellbeing
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 5 issue(s) found
+    1. resource_efficiency / resource_scope (denominator aggregation)
+       Q: The denominator of resource_efficiency combines energy (kWh), direct materials, and operator labor-hours — three incommensurable units. What conversion weights or composite index should be used to form a single 'resource_unit' (e.g., 1 kWh = £0.18, 1 labor-hour = £22, materials at standard cost per kg)?
+       A: Denominator is computed as the monetary cost of each resource at site standard rates (energy tariff, material standard cost, and fully-loaded labor rate), summed in the same currency as the numerator, so resource_efficiency becomes dimensionless value-added per pound of resource cost.
+    2. context / shift_duration (missing field)
+       Q: The contract scope is 'single_shift' but no shift length is given — is this an 8-hour, 10-hour, or 12-hour shift? Fatigue accumulation, the dB(A) time-weighted average, and total resource budgets all scale with shift length, and feasibility of fatigue ≤ 0.4 may differ significantly across these options.
+       A: Shift duration is assumed to be 8 hours (standard day shift), consistent with the occupational noise TWA reference period used for the 80 dB(A) lower action value.
+    3. operator_fatigue_index / constraint scope (individual vs. fleet)
+       Q: With operator_task_rotation_schedule as a decision variable, does the fatigue ≤ 0.4 constraint apply to every individual operator at every evaluation point during the shift, or to the shift-average fatigue index across the operator pool — since a rotation that averages 0.38 could still let individual workers peak at 0.65?
+       A: The constraint is applied individually and continuously: no single operator's fatigue index may exceed 0.4 at any real-time monitoring interval, and rotation is scheduled to prevent individual peaks rather than to average them down.
+    4. resource_efficiency / minimum throughput floor (missing lower bound on output)
+       Q: Maximising value/resource ratio does not guarantee meaningful absolute output — the optimiser could legally satisfy all constraints by processing a tiny, high-margin micro-batch and idling for the rest of the shift. Should a minimum delivered-value floor or minimum utilisation rate be added (e.g., at least 80% of nominal shift capacity must be attempted)?
+       A: A soft minimum throughput floor of 70% of the shift's nominal production target is enforced as a secondary constraint, violated only if the hard fatigue or noise constraints make it infeasible, to prevent degenerate low-volume solutions.
+    5. ambient_noise_level / measurement scope (multi-operator positions)
+       Q: The assumption pins noise measurement at 'the operator primary work position,' but with task rotation and auxiliary equipment activation as decision variables, different operators may occupy different positions with different noise profiles during the shift. Should the 80 dB(A) limit apply to every occupied position simultaneously, or only to the highest-exposure operator at any given time?
+       A: The 80 dB(A) ceiling is enforced at every currently occupied operator position; if auxiliary equipment raises noise above 80 dB(A) at any staffed station, that equipment configuration is excluded from the feasible set regardless of the primary-position reading.
+
+  [L2] Generated 8 candidate schedules
+    Pareto front: 4 non-dominated [Comfort-First, Balanced-Moderate, S1d_det, S1e_det]
+    Selected: S1e_det
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2}
+
+  [L4] Guards armed: 7 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+2026-09-05 23:51:16,968 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:51:16,969 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 325
+    Throughput:     40.7 u/h
+    Defect rate:    0.0079
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   21.7%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+2026-09-05 23:51:16,969 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +25.0%
+  Working mode: AUDITOR
+
+  [L4-INT] Disturbance injected: demand_surge +25.0% -> {'applied': True, 'type': 'demand_surge', 'stub': True}
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 40.7 u/h vs new demand 65.0 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+  [LLM FALLBACK] Planning: 2 validation errors for Schedule
+r1_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.2, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal
+r2_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.18, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal -> using deterministic
+2026-09-05 23:52:10,087 cbpa.layer2_planning.plan_generator [WARNING] LLM planning failed: 2 validation errors for Schedule
+r1_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.2, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal
+r2_speed_fraction
+  Input should be less than or equal to 1 [type=less_than_equal, input_value=1.18, input_type=float]
+    For further information visit https://errors.pydantic.dev/2.12/v/less_than_equal, falling back to deterministic
+2026-09-05 23:52:10,087 cbpa.layer2_planning.pareto [WARNING] pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2'
+2026-09-05 23:52:10,087 cbpa.runner.experiment [WARNING] Phase 3 certification gate: NO candidate passes the deterministic check; the architecture would escalate here, the prototype's fixed phase flow carries S2 forward flagged
+  [L2] 6 aggressive S2 variants generated
+    Pareto front: 1 non-dominated [S2]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+25.0%) likely caused FatigueIndex (hard) breach
+    demand_base_uph drift (+25.0%) likely caused Noise (hard) breach
+
+  [L3] Repair suggestions (LLM):
+    human_cycle_rate_multiplier: 1.15 -> 0.85 (The fatigue index (0.6001) exceeds the 0.4 limit by 0.2001, a ~33% excess. The human_cycle_rate_multiplier at 1.15 is the direct driver of fatigue accumulation. Reducing it from 1.15 to 0.85 lowers the operator work pace below baseline, allowing sufficient recovery time between cycles. Assuming fatigue scales approximately proportionally with cycle rate, a reduction of ~26% in the multiplier should bring the fatigue index into the feasible range near or below 0.4.)
+    r2_speed_fraction: 1.0 -> 0.8 (Noise at 84.9 dB violates the 80.0 dB limit by 4.9 dB. R2 is running at maximum speed (1.0), making it the dominant mechanical noise emitter. Robot mechanical noise scales with speed via a power law; for typical geared/servo systems, sound power scales roughly as speed^4 to speed^6, translating to a dB reduction of 10*n*log10(1/0.80). At n=4 this yields ~3.9 dB; at n=6 approximately 5.8 dB. Reducing r2_speed_fraction to 0.80 is the smallest single-parameter change most likely to close the 4.9 dB gap.)
+    r1_speed_fraction: 0.9 -> 0.82 (If r2 reduction alone is insufficient to fully close the 4.9 dB noise gap, a modest reduction in r1 speed from 0.9 to 0.82 provides an additional noise margin. R1 at 0.9 still contributes meaningfully to total noise floor. The 0.08 reduction is small enough to avoid large throughput penalties while contributing an estimated 1-2 dB of additional noise reduction as a safety buffer.)
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    A 25.0% demand surge has rendered the current production schedule infeasible under active human-centric constraints. Two violations were detected: (1) FatigueIndex reached 0.6001, exceeding the worker safety ceiling of 0.40 by a margin of +0.2001 — indicating unsustainable physical strain on operators; (2) Ambient Noise reached 84.9 dB, surpassing the occupational health limit of 80.0 dB by +4.9 dB — a level associated with hearing risk under prolonged exposure. Both constraints are classified as human-centric and cannot be automatically overridden by the scheduling engine. Escalation to production management is required before any schedule can be approved.
+
+  [Escalation] Remediation options presented to manager:
+    - Option 1 (Recommended): Expand Shift Capacity via Crew Rotation and Parallel Staffing: Add a supplementary shift crew or activate a parallel production cell to absorb the 25% demand increase. By distributing workload across more operators and staggering high-intensity task segments, FatigueIndex per worker can be brought below 0.40. Pair with acoustic isolation panels or quieter ancillary equipment to restore Noise compliance to ≤80.0 dB. No constraint relaxation required. Lead time to implement: 1–2 days for crew scheduling; capital cost for acoustic measures is moderate.
+      Preserves human constraints: Yes
+    - Option 2 (Moderate): Partial Demand Deferral with Phased Production: Accept 15 percentage points of the 25% demand increase in the current window, deferring the remaining 10% to the next production cycle. This keeps per-shift intensity within FatigueIndex ≤0.40 and Noise ≤80.0 dB without adding headcount. The trade-off is a partial delivery shortfall (~12% of total order volume delivered late). Suitable when downstream buffer stock or customer lead-time flexibility exists. Human-centric constraints are fully preserved.
+      Preserves human constraints: Yes
+    - Option 3 (Last Resort): Time-Limited Constraint Relaxation with Enhanced Worker Protections: Temporarily raise FatigueIndex ceiling to 0.50 (from 0.40) and Noise ceiling to 85.0 dB (from 80.0 dB) for a single production window not to exceed 48 hours. Mandatory mitigations must accompany this waiver: mandatory PPE (noise-rated hearing protection, minimum NRR 25), enhanced break schedules (15 min rest per 45 min of high-intensity work), real-time biometric fatigue monitoring, and a mandatory 24-hour recovery window before the next high-demand cycle. This option requires explicit sign-off from the production manager and occupational health officer. Human-centric constraints are formally relaxed.
+      Preserves human constraints: No
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+2026-09-05 23:53:48,745 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue' canonicalised to FatigueIndex
+2026-09-05 23:53:48,746 cbpa.runner.experiment [WARNING] LLM constraint 'noise_level' canonicalised to Noise
+2026-09-05 23:53:48,746 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] Learning bias from 4 prior experience(s):
+    Avoid:  ['S2', 'S2']
+    Prefer: ['S3', 'S3']
+    Hints:  ['throughput_uph', 'deadline_gap_pct']
+
+  [L5] Adaptation reasoning: macro
+    Insight: Prior experience (2/2 MACRO accepted, 0/2 MESO accepted) combined with 100% FatigueIndex violation probability makes MACRO the only tier with demonstrated success in this regime; the fatigue constraint is intrinsically hard under current speed fractions and cannot be relaxed by policy switching without L1-L2 replanning.
+    Synthesis: S2 fails deterministically under demand_surge (both Fatigue and Noise hard-constraint violations appear structural, not stochastic), making S3 the robust default policy for this disturbance type. Throughput and deadline-gap metrics are highly stable across both observations (range < 2%), suggesting S3 performance is predictable. However, with only 2 trials the apparent stability may reflect identical simulation conditions rather than true robustness; confidence remains low until additional diverse trials confirm the pattern.
+
+  [L2] 8 balanced S3 variants generated
+    Pareto front: [S3-Balanced-A, S3-Efficient-B, S3-Conservative-C, S3a_det, S3d_det, S3e_det]
+
+  [L3] S3 verification: P(feasible)=100% | Feasible=True
+
+  [L5] Adaptations applied: 2
+    [meso] Switch from high-speed policy family to robust policy family
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L5] Experience recorded to learning store (total: 5)
+    Rejected: S2 | Accepted: S3 | Disturbance: demand +25.0%
+
+  [L4] S3 DEPLOYED | Throughput=34.5 u/h | V/R=0.416 | P(feasible)=100%
+2026-09-05 23:54:43,235 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:54:43,235 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 275
+    Throughput:     34.5 u/h
+    Defect rate:    0.008
+    Fatigue index:  0.3257
+    Noise:          79.4 dB
+    Energy:         381.0 kWh
+    Deadline gap:   46.9%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=79.4 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=79.4 (threshold 75.0) -> warn
+2026-09-05 23:54:43,236 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+
+======================================================================
+  PHASE 6: Macro-Adaptation (Three-Tier Hierarchy)
+======================================================================
+
+  Second disturbance: R1 mechanical wear
+  R1 speed degraded to 50% of nominal
+  Macro threshold: P(feasible) < 90%
+
+  [L4-INT] Disturbance injected: r1_degradation fraction=0.5 -> {'applied': True, 'type': 'r1_degradation', 'stub': True}
+  [L5] Tier 1 — Micro-adaptation (parameter retune):
+    S3_micro: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Tier 2 — Meso-adaptation (policy family switch):
+    S3_meso: P(feasible)=0% | Feasible=False -> INSUFFICIENT
+
+  [L5] Best P(feasible) after micro/meso: 0% (threshold: 90%)
+
+  [L5] Tier 3 — MACRO-ADAPTATION TRIGGERED
+    Full replan: re-elicit contract -> regenerate schedules -> verify
+2026-09-05 23:55:02,309 cbpa.runner.experiment [WARNING] LLM constraint 'operator_fatigue_index' canonicalised to FatigueIndex
+2026-09-05 23:55:02,309 cbpa.runner.experiment [WARNING] LLM constraint 'ambient_noise_level' canonicalised to Noise
+2026-09-05 23:55:02,309 cbpa.runner.experiment [WARNING] LLM contract omitted typed assumption(s) ['demand_base_uph', 'r1_max_speed_mps', 'r2_max_speed_mps', 'network_latency_ms', 'ambient_temp_c']; re-inserted from the plant model
+
+  [L1] Contract C3 re-elicited for degraded R1 conditions
+  [L2] S4 generated for degraded envelope
+  [L3] S4 verified: P(feasible)=100% | Feasible=True
+
+  [L4] S4 DEPLOYED via MACRO replan | Throughput=25.1 u/h | V/R=0.358
+2026-09-05 23:55:02,313 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+
+  [L4-INT] Running integrated execution (Isaac Sim + BaSyx + OPC-UA) ...
+2026-09-05 23:55:02,314 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+  [L4-INT] Integrated execution complete:
+    Units produced: 200
+    Throughput:     25.1 u/h
+    Defect rate:    0.0073
+    Fatigue index:  0.3225
+    Noise:          76.1 dB
+    Energy:         409.0 kWh
+    Deadline gap:   51.8%
+    Demand met:     False
+    Guard events:   2
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+      Noise_Warning: noise_db=76.1 (threshold 75.0) -> warn
+2026-09-05 23:55:02,314 cbpa.service.integration.basyx_bridge [WARNING] BaSyx connect failed: [Errno 111] Connection refused. Will retry on next call.
+    Bridges: isaac_sim=stub, basyx_aas=stub, opcua=stub
+  [run 09] ok in 951.5s; LLM calls=35 exceptions=0 empty=0 schema_invalid=1 fallbacks=2 llm_warnings={'contract_repair': 54, 'fallback': 2}
+
+  Batch done: ok=3 error=0 skipped=0  →  data/repeated/single_full_claude-sonnet-4-6_llmonly_integrated

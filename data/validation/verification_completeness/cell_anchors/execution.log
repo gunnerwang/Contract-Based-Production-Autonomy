@@ -1,0 +1,122 @@
+
+======================================================================
+  PHASE 1: Intent Translation & Contract Deployment
+======================================================================
+
+  Manager says: "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+  Working mode: LEGISLATOR
+
+  [L1] Contract C1 elicited:
+    KPIs:        Throughput (maximize), DefectRate (upper_bound), ChangeoverTime (minimize)
+    Constraints: FatigueIndex <= 0.4, Noise <= 80.0, CyberRiskLevel <= 2.0
+    Priorities:  HumanWellbeing > Safety > Quality > Throughput
+    Assumptions: demand_base_uph=52.0, r1_max_speed_mps=1.5, r2_max_speed_mps=1.2, network_latency_ms=20.0, ambient_temp_c=22.0
+
+  [L1] Ambiguity detection: 2 issue(s) found
+    1. energy_kwh_cap
+       Q: Maximising throughput may increase energy consumption by ~40 % (from ~2.1 kWh to ~3.0 kWh per shift).  Should energy be hard-capped at 3.0 kWh, or is unconstrained energy use acceptable?
+       A: Yes — cap energy at 3.0 kWh per shift.  Throughput should not be maximised at the expense of excessive energy draw.
+    2. shift_hours_overflow
+       Q: The contract sets shift duration at 8 h, but demand spike risk is flagged as high.  If demand exceeds capacity within the shift, should shift duration extend beyond the planned window, or should throughput targets be relaxed instead?
+       A: Do not extend the shift.  If demand cannot be met within 8 h while respecting constraints, escalate to the manager with the standard governance query.
+
+  [L2] Generated 5 candidate schedules
+    Pareto front: 2 non-dominated [S1d, S1e]
+    Selected: S1e
+
+  [L3] Stochastic verification (n=200 Monte Carlo samples):
+    S1 feasible: True | P(feasible)=100%
+    Margins: {'FatigueIndex': 0.0499, 'Noise': 2.2, 'CyberRiskLevel': 1.0}
+
+  [L4] Guards armed: 4 runtime guards from certificate
+  [L4] S1 DEPLOYED | Throughput=40.7 u/h | V/R=0.481 | P(feasible)=100%
+
+  [L4] Running SimPy simulation (8-hour shift) ...
+  [L4] Simulation complete:
+    Units produced: 332
+    Throughput:     41.5 u/h
+    Defect rate:    0.006
+    Fatigue index:  0.3501
+    Noise:          77.8 dB
+    Energy:         401.0 kWh
+    Deadline gap:   20.2%
+    Demand met:     False
+    Guard events:   1
+      Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+======================================================================
+  PHASE 2: Disturbance Detection & Monitoring
+======================================================================
+
+  Disturbance: Demand surge +20.0%
+  Working mode: AUDITOR
+
+  [L4] Guard events: 1
+    Noise_Warning: noise_db=77.8 (threshold 75.0) -> warn
+
+  [L4] Assumption drift detected:
+    demand_base_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Shortfall: throughput 41.5 u/h vs new demand 62.4 u/h
+
+======================================================================
+  PHASE 3: Autonomous Replan Attempt
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: generate aggressive S2 schedules to meet new demand
+
+pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'S2d'
+  [L2] 5 aggressive S2 variants generated
+    Pareto front: 1 non-dominated [S2d]
+
+  [L3] S2 REJECTED by verification firewall:
+    P(feasible) = 0%
+    Violation: FatigueIndex: 0.6001 violates <= 0.4
+    Violation: Noise: 84.9 violates <= 80.0
+    Violation probabilities: FatigueIndex=100%, Noise=100%
+
+  [L4] Constraint breach attribution:
+    demand_base_uph drift (+20.0%) may contribute to FatigueIndex (hard) breach
+    demand_base_uph drift (+20.0%) may contribute to Noise (hard) breach
+
+  [L3] Repair suggestions (rule-based):
+    human_cycle_rate_multiplier: 1.15 -> 1.0 (Reduce human cycle rate to lower fatigue (margin -0.200))
+    r1_speed_fraction: 0.9 -> 0.8 (Reduce R1 speed to lower noise (margin -4.900))
+
+======================================================================
+  PHASE 4: Human-in-the-Loop Escalation
+======================================================================
+
+  Working mode: PARTNER
+  Reason: autonomous replan failed — escalating to manager
+
+  [Escalation] Conflict summary:
+    Constraint Conflict: Cannot meet new Demand (+20%) without violating Human Fatigue and Noise limits.
+
+  [Escalation] Remediation options presented to manager:
+    - Option A: Relax Fatigue Limit to 0.6 (Allows high-speed mode)
+      Preserves human constraints: No
+    - Option B: Relax Noise Limit to 90dB (Allows robot acceleration)
+      Preserves human constraints: No
+    - Option C: Keep Human Constraints (Miss deadline by ~15%)
+      Preserves human constraints: Yes
+
+  [Manager] Decision: Option C
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1 → C2
+
+======================================================================
+  PHASE 5: Adaptation & Learning
+======================================================================
+
+  Working mode: AUDITOR
+  Strategy: implement pre-authorised C2, generate balanced S3 with learning bias
+
+  Using pre-authorised contract: C2
+
+  [L5->L2] No learning bias (first shift — no prior experience)
+
+  [L5] Adaptation reasoning: macro
+    Insight: Rule-based tier selection (no LLM reasoning)
+

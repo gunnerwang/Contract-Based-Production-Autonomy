@@ -1,0 +1,119 @@
+
+======================================================================
+  ROUND 1: Initial Contract & Deployment (L1 → L2 → L3 → L4)
+======================================================================
+
+  Manager says: "Maximize total factory throughput across both assembly and test-pack cells for this shift, while keeping each operator's fatigue within their individual limits, combined noise under 82 dB, and product quality above 99%.  Three product variants (V_A, V_B, V_C) must be produced; route them efficiently across the two cells."
+  Working mode: LEGISLATOR
+
+  [L1] Contract C1_factory elicited:
+    KPIs:        FactoryThroughput, DefectRate, CellBalanceLoss, ChangeoverTime
+    Constraints: FatigueIndex_H1 <= 0.4, FatigueIndex_H2 <= 0.35, FatigueIndex_H3 <= 0.4, FactoryNoise <= 82.0, CyberRiskLevel <= 2.0, AGVTransferTime <= 60.0
+    Ambiguities: 2 resolved
+
+  [L2] Generated 5 candidates, Pareto selected FS1e
+  [L3] Verification: feasible=True | P(feasible)=99%
+    Margins: {'FatigueIndex_H1': 0.0417, 'FatigueIndex_H2': 0.0124, 'FatigueIndex_H3': 0.4, 'FactoryNoise': 2.0, 'CyberRiskLevel': 1.0, 'AGVTransferTime': 29.94}
+  [L4] Guards armed: 7 runtime guards
+
+  [L4] FS1 DEPLOYED | Throughput=84.4 uph | Noise=80.0 dB
+
+======================================================================
+  ROUND 2: Disturbance Detection & Monitoring (L4)
+======================================================================
+  Working mode: AUDITOR
+
+  [L4] Assumption drift detected:
+    factory_demand_uph drifted from 100.0 to 120.0 (+20.0%), exceeding 10.0% tolerance
+    cellA_demand_uph drifted from 52.0 to 62.4 (+20.0%), exceeding 10.0% tolerance
+    cellB_demand_uph drifted from 48.0 to 57.599999999999994 (+20.0%), exceeding 10.0% tolerance
+
+  [L4] Throughput 84.4 uph will miss demand 120.0 uph by 29.7%
+
+======================================================================
+  ROUND 3: Autonomous Replan Attempt (L2 → L3)
+======================================================================
+  Working mode: AUDITOR
+  Strategy: aggressive replan to meet new demand + handle disturbances
+
+pareto_filter: no feasible candidate in non-dominated set – returning infeasible fallback 'FS2e'
+  [L2] Generated 5 aggressive replan candidates
+    Pareto front: [FS2d, FS2e]
+
+  [L3] FS2 VERIFICATION:
+    Feasible: False | P(feasible): 0%
+    Violation: FatigueIndex_H1: 0.4937 violates <= 0.4
+    Margins: {'FatigueIndex_H1': -0.0937, 'FatigueIndex_H2': 0.35, 'FatigueIndex_H3': 0.1351, 'FactoryNoise': 0.1, 'CyberRiskLevel': 1.0, 'AGVTransferTime': 29.64}
+
+======================================================================
+  ROUND 4: Human-in-the-Loop Escalation (Meta)
+======================================================================
+  Working mode: PARTNER
+  Reason: autonomous replan violated constraints — escalating to manager
+
+  [Escalation] Factory Constraint Conflict: Cannot meet +20% demand across both cells without violating per-operator fatigue limits or combined factory noise constraint (82 dB).
+
+  [Escalation] 5 remediation options:
+    - Option A: Relax H1 fatigue limit from 0.4 to 0.5. Cell A runs high-speed mode to compensate for Cell B's reduced capacity.
+      Preserves human constraints: No | Gap: ~5.0%
+    - Option B: Drop V_C from this shift entirely. Cell B handles only V_A and V_B at comfortable pace. ~15% revenue loss.
+      Preserves human constraints: Yes | Gap: ~15.0%
+    - Option C: Extend shift by 1 hour with H3 as overtime backup in Cell B. Union rules permit 1h overtime with consent. Cost increase ~12%.
+      Preserves human constraints: Yes | Gap: ~3.0%
+    - Option D: Accept 10% lower total factory throughput. Both cells run at comfortable pace. All human constraints preserved.
+      Preserves human constraints: Yes | Gap: ~10.0%
+    - Option E: Redistribute: Cell A handles all V_A and V_B. Cell B handles only V_C with H3 (reduced pace, automated testing). Move H1 to cover both cells' inspection during breaks.
+      Preserves human constraints: Yes | Gap: ~8.0%
+
+  [Manager] Decision: Option D
+    Rationale: Prioritizing human well-being over deadline
+  [Meta] Contract pre-authorised: C1_factory → C2_factory
+
+======================================================================
+  ROUND 5: Adaptation & Stabilization (L5 → L2 → L3 → L4 → L5)
+======================================================================
+  Working mode: AUDITOR
+  Using pre-authorised contract: C2_factory
+
+  [L5] No learning bias (first shift)
+
+  [L2] Generated 5 balanced FS3 candidates
+    Pareto front: [FS3b, FS3d, FS3e]
+
+  [L3] FS3 verification: feasible=True | P(feasible)=100%
+
+  [L5] Adaptations applied: 2
+    [micro] Retune robot velocity and buffer timing parameters
+    [micro] Retune robot velocity and buffer timing parameters
+
+  [L4] FS3 DEPLOYED | Throughput=75.8 uph | Noise=78.8 dB
+  [L5] Experience recorded (total: 1)
+
+======================================================================
+  ROUND 6: Shift-Close Macro-Adaptation (L4 → L5 → L1 → L2 → L3 → L4)
+======================================================================
+  Working mode: LEGISLATOR
+  Trigger: shift ends — L5 learning feeds back into L1 for next shift
+
+  [L4] Shift close. Final FS3 KPIs:
+    Throughput: 75.8 uph (target was 100.0; gap 24.2 uph)
+    Noise: 78.8 dB | Fatigue: {'H1': 0.3479, 'H2': 0.0, 'H3': 0.2253}
+
+  [L5] Shift lessons surfaced (1 experience record(s)):
+    • H2 absence materialised at hour 3 — treat as elevated risk for next shift
+    • Cell B bottleneck under H3-only staffing: V_B/V_C overloaded Cell A
+    • FS3 conservative routing (V_A→Cell B only) maintained all fatigue constraints
+    • Learning store has 1 record(s) from this shift
+
+  [L1] Contract rewritten for next shift: C2_factory → C3_factory
+    H2 availability tolerance: 5% → 0% (plan for absence)
+    Cell B conservative demand baseline: 48.0 → 44.0 uph
+    Variant routing flexibility: built in as contract-level contingency
+
+  [L2] Pre-generated 5 next-shift candidates (FS4)
+    Pareto front: [FS4b, FS4d, FS4e]
+
+  [L3] FS4 pre-verified: feasible=True | P(feasible)=96%
+  [L4] FS4 pre-staged with 7 guards armed
+
+  [L4] FS4 PRE-STAGED for next shift | Throughput=81.7 uph | Noise=80.6 dB

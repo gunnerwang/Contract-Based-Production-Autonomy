@@ -1,0 +1,926 @@
+[
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:27.512801",
+    "layer": "L1",
+    "action": "contract_elicited",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "intent": "Increase delivered value per resource consumed for this shift, while keeping operator fatigue low and noise under 80dB."
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:27.512813",
+    "layer": "L1",
+    "action": "ambiguities_resolved",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "ambiguity_count": 5,
+      "flags": [
+        {
+          "field": "resource_efficiency.threshold",
+          "question": "Is there a maximum throughput rate or efficiency ceiling beyond which further gains are not acceptable (e.g., \u2264 120% of baseline output rate)? Without any upper bound, the optimiser will legally push operators to exactly fatigue = 0.4 and machines to exactly 80 dB for the entire shift to maximise efficiency \u2014 likely not the manager's intent.",
+          "resolution": "Impose an implicit soft ceiling by targeting fatigue \u2264 0.30 and noise \u2264 75 dB as operating targets, reserving the hard limits (0.4 and 80 dB) as inviolable emergency ceilings, giving a 25 % and 6 % safety buffer respectively."
+        },
+        {
+          "field": "context.shift_duration / operator_fatigue.threshold interpretation",
+          "question": "What is the planned shift length (6, 8, or 12 hours), and is the fatigue limit of 0.4 a hard ceiling at any instant, a rolling hourly average, or an end-of-shift value? On a 12-hour shift a point-in-time cap of 0.4 may force deep slowdowns from hour 6 onward, collapsing effective efficiency for the second half.",
+          "resolution": "Assume an 8-hour shift and apply fatigue = 0.4 as a hard ceiling at every decision epoch (most conservative reading); if actual shift duration is longer, the constraint will trigger replanning automatically."
+        },
+        {
+          "field": "noise_level.direction (KPI minimize vs. hard constraint ceiling)",
+          "question": "Should noise be actively minimised below 80 dB wherever possible (competing with efficiency maximisation), or is 80 dB simply a hard ceiling and the optimiser is free to run at 78\u201379 dB if that maximises efficiency? Treating noise as both a minimise-KPI and a hard constraint creates an unnecessary secondary objective that silently steals efficiency headroom.",
+          "resolution": "Treat 80 dB solely as a hard upper-bound constraint, not as an active minimisation target; the optimiser may operate at any noise level \u2264 80 dB and should use that headroom in service of efficiency."
+        },
+        {
+          "field": "resource_efficiency (weighting / aggregation of resource types)",
+          "question": "How should energy, raw materials, machine time, and labour hours be weighted against each other in the efficiency denominator? For example, if cutting energy by 10 % requires 20 % more raw material, is that a net efficiency gain or loss? Without explicit weights the optimiser may make resource substitutions the manager would find unacceptable.",
+          "resolution": "Weight each resource type by its current monetary cost (EUR or USD per unit), normalising to a single cost-per-unit-of-conforming-output metric; ties broken in favour of reducing energy consumption."
+        },
+        {
+          "field": "kpi_targets / priority_order (missing minimum output volume floor)",
+          "question": "Is there a minimum production volume (e.g., order-fulfilment target or percentage of prior equivalent shift) that must be met regardless of efficiency calculations? A pure efficiency maximiser may legally reduce total output if a lower volume can be delivered more resource-efficiently \u2014 gaming the KPI without meeting customer demand.",
+          "resolution": "Enforce a minimum throughput floor of 90 % of the rolling 4-shift average for the same shift type; if no historical data are available, set the floor to the daily order-book demand divided by number of shifts, rounded up."
+        }
+      ]
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.029096",
+    "layer": "L2",
+    "action": "pareto_frontier_computed",
+    "contract_state": "C1 active",
+    "working_mode": "legislator",
+    "details": {
+      "canonical": "S1",
+      "num_candidates": 10,
+      "non_dominated": [
+        "Conservative Comfort",
+        "Balanced Moderate",
+        "Low Fatigue Focus",
+        "Efficiency-Leaning Moderate",
+        "S1d_det",
+        "S1e_det",
+        "S1opt_det"
+      ],
+      "dominated": [
+        "S1a_det",
+        "S1b_det",
+        "S1c_det"
+      ],
+      "selected": "S1opt_det",
+      "rationale": "Selected 'S1opt_det' from the non-dominated front (7 of 10 candidates) as the feasible candidate with the highest V/R score (0.494) and constraint margin (0.0397).",
+      "scores": {
+        "Conservative Comfort": {
+          "vr_score": 0.385,
+          "constraint_margin": 0.2287,
+          "feasible": 1.0
+        },
+        "Balanced Moderate": {
+          "vr_score": 0.397,
+          "constraint_margin": 0.1563,
+          "feasible": 1.0
+        },
+        "Low Fatigue Focus": {
+          "vr_score": 0.391,
+          "constraint_margin": 0.1971,
+          "feasible": 1.0
+        },
+        "Efficiency-Leaning Moderate": {
+          "vr_score": 0.406,
+          "constraint_margin": 0.118,
+          "feasible": 1.0
+        },
+        "S1a_det": {
+          "vr_score": 0.452,
+          "constraint_margin": 0.07,
+          "feasible": 1.0
+        },
+        "S1b_det": {
+          "vr_score": 0.451,
+          "constraint_margin": 0.0499,
+          "feasible": 1.0
+        },
+        "S1c_det": {
+          "vr_score": 0.449,
+          "constraint_margin": 0.0499,
+          "feasible": 1.0
+        },
+        "S1d_det": {
+          "vr_score": 0.455,
+          "constraint_margin": 0.07,
+          "feasible": 1.0
+        },
+        "S1e_det": {
+          "vr_score": 0.481,
+          "constraint_margin": 0.0499,
+          "feasible": 1.0
+        },
+        "S1opt_det": {
+          "vr_score": 0.494,
+          "constraint_margin": 0.0397,
+          "feasible": 1.0
+        }
+      },
+      "candidate_sources": {
+        "Conservative Comfort": "llm",
+        "Balanced Moderate": "llm",
+        "Low Fatigue Focus": "llm",
+        "Efficiency-Leaning Moderate": "llm",
+        "S1a_det": "deterministic",
+        "S1b_det": "deterministic",
+        "S1c_det": "deterministic",
+        "S1d_det": "deterministic",
+        "S1e_det": "deterministic",
+        "S1opt_det": "deterministic"
+      },
+      "selected_source": "deterministic",
+      "gate_no_feasible_candidate": false,
+      "gate_certified": true,
+      "gate_p_feasible": 0.96,
+      "gate_tried": [
+        [
+          "S1opt_det",
+          0.96
+        ]
+      ]
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.030685",
+    "layer": "L2",
+    "action": "schedule_generated",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S1",
+      "vr_score": 0.494
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.031861",
+    "layer": "L3",
+    "action": "verification_passed",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "feasible": true,
+      "margins": {
+        "FatigueIndex": 0.0397,
+        "Noise": 2.0
+      },
+      "p_feasible": 0.96,
+      "constraint_violation_probabilities": {
+        "FatigueIndex": 0.04,
+        "Noise": 0.0
+      },
+      "worst_case_margins": {
+        "FatigueIndex": 0.0038,
+        "Noise": 1.6
+      },
+      "stochastic_n_samples": 200
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.031875",
+    "layer": "L4 (Guard)",
+    "action": "guards_armed",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "guard_count": 7,
+      "guards": [
+        "GUARD: FatigueIndex <= 0.4 \u2192 escalate",
+        "GUARD: Noise_Warning <= 75.0 \u2192 warn",
+        "GUARD: Noise <= 80.0 \u2192 escalate",
+        "GUARD: Energy_Cap <= 500.0 \u2192 clamp",
+        "GUARD: DefectRate_Cap <= 0.01 \u2192 escalate",
+        "GUARD: R1_SpeedCap <= 1.0 \u2192 clamp",
+        "GUARD: R2_SpeedCap <= 1.0 \u2192 clamp"
+      ]
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.031878",
+    "layer": "L4",
+    "action": "schedule_deployed",
+    "contract_state": "C1 verified",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S1"
+    }
+  },
+  {
+    "phase": 1,
+    "timestamp": "2026-09-07T11:32:47.032958",
+    "layer": "L4 (Integrated)",
+    "action": "integrated_execution",
+    "contract_state": "active",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S1",
+      "units_produced": 336,
+      "throughput_uph": 42.1,
+      "defect_rate": 0.008,
+      "fatigue_index": 0.3603,
+      "noise_db": 78.0,
+      "energy_kwh": 402.0,
+      "demand_met": false,
+      "guard_events_count": 2,
+      "bridges": {
+        "isaac_sim": false,
+        "basyx_aas": false,
+        "opcua": false
+      }
+    }
+  },
+  {
+    "phase": 2,
+    "timestamp": "2026-09-07T11:32:47.033048",
+    "layer": "Meta (Governance)",
+    "action": "mode_transition",
+    "contract_state": "working_mode=auditor",
+    "working_mode": "auditor",
+    "details": {
+      "from_mode": "legislator",
+      "to_mode": "auditor",
+      "trigger": "Contract deployed; system enters autonomous monitoring",
+      "transition_phase": "1->2"
+    }
+  },
+  {
+    "phase": 2,
+    "timestamp": "2026-09-07T11:32:47.033239",
+    "layer": "L4 (Guard)",
+    "action": "guards_enforced",
+    "contract_state": "C1 active",
+    "working_mode": "auditor",
+    "details": {
+      "guard_events_count": 1,
+      "guard_events": [
+        {
+          "guard": "Noise_Warning",
+          "metric": "noise_db",
+          "value": 78.0,
+          "threshold": 75.0,
+          "action": "warn",
+          "enforced": false
+        }
+      ]
+    }
+  },
+  {
+    "phase": 2,
+    "timestamp": "2026-09-07T11:32:47.033259",
+    "layer": "L4 (Monitor)",
+    "action": "assumption_violated",
+    "contract_state": "C1 active; assumption drift",
+    "working_mode": "auditor",
+    "details": {
+      "assumption": "demand_base_uph",
+      "expected": 52.0,
+      "observed": 65.0,
+      "drift_pct": 25.0,
+      "attribution": "demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance"
+    }
+  },
+  {
+    "phase": 2,
+    "timestamp": "2026-09-07T11:33:07.628747",
+    "layer": "L4 (Monitor)",
+    "action": "shortfall_detected",
+    "contract_state": "C1 active; gap",
+    "working_mode": "auditor",
+    "details": {
+      "current_throughput": 42.1,
+      "new_demand": 65.0,
+      "gap_pct": -35.230769230769226,
+      "assumption_violations": [
+        "demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance"
+      ],
+      "constraint_attributions": [
+        "demand_base_uph drift (+25.0%) likely caused DeadlineGap (soft) breach"
+      ],
+      "l4_llm_attributions": [
+        {
+          "assumption": "demand_base_uph",
+          "drift_pct": 25.0,
+          "constraints": [
+            "DeadlineGap"
+          ],
+          "mechanism": "The baseline demand assumption rose from 52.0 to 65.0 UPH (+25%). Schedule S1 was sized to meet a 52 UPH production target, so all timing buffers and deadline margins were computed against that rate. With actual demand now at 65 UPH, the required output rate exceeds the schedule's designed capacity. Critically, current throughput (42.1 UPH) is already below even the original target (52 UPH) \u2014 only ~64.8% of the new demand is being fulfilled. The demand surge widens the gap between units required and units produced per hour, causing cumulative unit shortfall to grow each cycle. This erodes and ultimately inverts the DeadlineGap margin: the time remaining before the Phase 2 deadline is insufficient to recover the accumulating shortfall at the current production rate, producing a negative margin of 0.352.",
+          "urgency": "high",
+          "action": "Escalate immediately to production control. Evaluate emergency capacity levers: authorize overtime or an additional shift, reallocate upstream buffer stock to downstream stations to boost throughput, and reassess whether the Phase 2 deadline can be renegotiated. Simultaneously, replan Schedule S1 with the corrected demand figure (65 UPH) to generate a feasible revised schedule. If throughput cannot be raised above the original 52 UPH target within minutes, a formal deadline-miss notification to the customer/planner must be issued."
+        }
+      ],
+      "l4_attribution_llm_used": true
+    }
+  },
+  {
+    "phase": 3,
+    "timestamp": "2026-09-07T11:33:29.980540",
+    "layer": "L2",
+    "action": "pareto_frontier_computed",
+    "contract_state": "C1 active",
+    "working_mode": "auditor",
+    "details": {
+      "canonical": "S2",
+      "num_candidates": 6,
+      "non_dominated": [
+        "S2"
+      ],
+      "dominated": [
+        "S2a_det",
+        "S2b_det",
+        "S2c_det",
+        "S2d_det",
+        "S2e_det"
+      ],
+      "selected": "S2",
+      "rationale": "No feasible candidate exists in the non-dominated front. Returning 'S2' (highest V/R = 0.474) as a fallback; manual review required before deployment.",
+      "scores": {
+        "S2": {
+          "vr_score": 0.474,
+          "constraint_margin": -4.9,
+          "feasible": 0.0
+        },
+        "S2a_det": {
+          "vr_score": 0.466,
+          "constraint_margin": -4.9,
+          "feasible": 0.0
+        },
+        "S2b_det": {
+          "vr_score": 0.462,
+          "constraint_margin": -5.5,
+          "feasible": 0.0
+        },
+        "S2c_det": {
+          "vr_score": 0.466,
+          "constraint_margin": -4.9,
+          "feasible": 0.0
+        },
+        "S2d_det": {
+          "vr_score": 0.467,
+          "constraint_margin": -4.9,
+          "feasible": 0.0
+        },
+        "S2e_det": {
+          "vr_score": 0.464,
+          "constraint_margin": -5.2,
+          "feasible": 0.0
+        }
+      },
+      "candidate_sources": {
+        "S2": "deterministic",
+        "S2a_det": "deterministic",
+        "S2b_det": "deterministic",
+        "S2c_det": "deterministic",
+        "S2d_det": "deterministic",
+        "S2e_det": "deterministic"
+      },
+      "selected_source": "deterministic",
+      "gate_no_feasible_candidate": true,
+      "gate_certified": false,
+      "gate_p_feasible": null,
+      "gate_tried": []
+    }
+  },
+  {
+    "phase": 3,
+    "timestamp": "2026-09-07T11:33:29.980635",
+    "layer": "L2",
+    "action": "aggressive_schedule_generated",
+    "contract_state": "C1 active",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S2",
+      "vr_score": 0.474
+    }
+  },
+  {
+    "phase": 3,
+    "timestamp": "2026-09-07T11:34:16.221862",
+    "layer": "L3",
+    "action": "schedule_rejected",
+    "contract_state": "C1 active",
+    "working_mode": "auditor",
+    "details": {
+      "feasible": false,
+      "violations": [
+        "FatigueIndex: 0.6001 violates <= 0.4",
+        "Noise: 84.9 violates <= 80.0"
+      ],
+      "p_feasible": 0.0,
+      "stochastic_n_samples": 200,
+      "constraint_violation_probabilities": {
+        "FatigueIndex": 1.0,
+        "Noise": 1.0
+      },
+      "assumption_attributions": [
+        "demand_base_uph drift (+25.0%) likely caused FatigueIndex (hard) breach",
+        "demand_base_uph drift (+25.0%) likely caused Noise (hard) breach"
+      ],
+      "l3_repair_suggestions": [
+        {
+          "parameter": "human_cycle_rate_multiplier",
+          "current_value": 1.15,
+          "suggested_value": 0.85,
+          "rationale": "Fatigue index (0.6001) must fall to \u22640.4, a reduction of ~33%. The human cycle rate multiplier is the direct causal driver of fatigue \u2014 each additional fraction above 1.0 accelerates cumulative physical load. Reducing from 1.15 to 0.85 lowers the operator's effective work pace by ~26%, which should bring the fatigue index below the 0.4 threshold assuming an approximately linear relationship between cycle rate and fatigue accumulation. This is the smallest single lever that can address a margin violation of this magnitude."
+        },
+        {
+          "parameter": "r2_speed_fraction",
+          "current_value": 1.0,
+          "suggested_value": 0.72,
+          "rationale": "Robot r2 is operating at maximum speed (1.0), making it the dominant noise source. Noise at 84.9 dB must fall to \u226480.0 dB \u2014 a 4.9 dB reduction. Robot acoustic emission scales approximately with the logarithm of mechanical power, which is proportional to speed. A reduction from 1.0 to 0.72 (~28% speed decrease) targets the required ~5 dB drop. r2 is prioritised over r1 because it is currently at full throttle and therefore has a steeper noise-vs-speed slope at its operating point."
+        },
+        {
+          "parameter": "r1_speed_fraction",
+          "current_value": 0.9,
+          "suggested_value": 0.78,
+          "rationale": "If the r2 reduction alone leaves noise marginally above 80 dB (due to model non-linearity or acoustic coupling), reducing r1 from 0.90 to 0.78 provides a ~1\u20132 dB additional noise budget. This is the third-priority, smallest-magnitude adjustment: r1 is already below max speed so its per-unit noise contribution is lower, but the 0.12 fractional reduction still yields a meaningful safety margin on the noise constraint without sacrificing throughput as severely as a larger r2 cut would."
+        }
+      ],
+      "l3_repair_llm_used": true
+    }
+  },
+  {
+    "phase": 4,
+    "timestamp": "2026-09-07T11:34:16.222072",
+    "layer": "Meta (Governance)",
+    "action": "mode_transition",
+    "contract_state": "working_mode=partner",
+    "working_mode": "partner",
+    "details": {
+      "from_mode": "auditor",
+      "to_mode": "partner",
+      "trigger": "Autonomous replan failed; escalation to human manager",
+      "transition_phase": "3->4"
+    }
+  },
+  {
+    "phase": 4,
+    "timestamp": "2026-09-07T11:34:53.824850",
+    "layer": "Meta",
+    "action": "escalation_generated",
+    "contract_state": "C1 \u2192 pending revision",
+    "working_mode": "partner",
+    "details": {
+      "conflict": "A 25.0% demand surge has rendered the proposed production schedule infeasible under current human-centric constraints. Two violations were detected: (1) FatigueIndex reached 0.6001, exceeding the worker safety ceiling of 0.40 by a margin of +0.2001 \u2014 indicating unsustainable cumulative physical and cognitive load; (2) Ambient Noise reached 84.9 dB, exceeding the occupational exposure limit of 80.0 dB by +4.9 dB \u2014 posing a hearing-damage risk under prolonged exposure. These violations are not marginal: FatigueIndex is 50% above its limit and Noise is 6% above its limit. The CBPA scheduler has blocked this schedule pending human review and explicit authorisation. No automated override has been applied. Immediate manager decision is required to determine whether to absorb partial demand shortfall, temporarily adjust constraint thresholds with compensatory controls, or restructure shift architecture.",
+      "options": [
+        "Option 1 (Recommended): Add a second partial shift to redistribute workload",
+        "Option 2 (Moderate): Mandate PPE controls and relax Noise limit to 85.0 dB; hold FatigueIndex firm",
+        "Option 3 (Last Resort): Temporarily relax both constraints with enhanced monitoring protocol"
+      ],
+      "assumption_drifts": [
+        "demand_base_uph drifted from 52.0 to 65.0 (+25.0%), exceeding 10.0% tolerance"
+      ]
+    }
+  },
+  {
+    "phase": 4,
+    "timestamp": "2026-09-07T11:34:53.824880",
+    "layer": "Meta \u2192 L1",
+    "action": "manager_decision",
+    "contract_state": "C1 \u2192 C2",
+    "working_mode": "partner",
+    "details": {
+      "selected": "Option C",
+      "rationale": "Prioritizing human well-being over deadline"
+    }
+  },
+  {
+    "phase": 4,
+    "timestamp": "2026-09-07T11:35:09.378832",
+    "layer": "Meta",
+    "action": "contract_preauthorised",
+    "contract_state": "C1 \u2192 C2 (pre-authorised)",
+    "working_mode": "partner",
+    "details": {
+      "contract": "C2"
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:35:09.378859",
+    "layer": "Meta (Governance)",
+    "action": "mode_transition",
+    "contract_state": "working_mode=auditor",
+    "working_mode": "auditor",
+    "details": {
+      "from_mode": "partner",
+      "to_mode": "auditor",
+      "trigger": "Manager decision received; system resumes autonomous execution",
+      "transition_phase": "4->5"
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:35:09.387046",
+    "layer": "L5",
+    "action": "learning_bias_queried",
+    "contract_state": "C2 active",
+    "working_mode": "auditor",
+    "details": {
+      "bias_available": true,
+      "bias_content": {
+        "avoid_policies": [
+          "S2",
+          "S2"
+        ],
+        "prefer_families": [
+          "S3",
+          "S3"
+        ],
+        "parameter_hints": {
+          "throughput_uph": {
+            "min": 42.1,
+            "max": 42.2
+          },
+          "deadline_gap_pct": {
+            "min": 29.6,
+            "max": 32.3
+          }
+        }
+      },
+      "experience_count": 4
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:35:52.409417",
+    "layer": "L5 (Reasoning)",
+    "action": "adaptation_tier_selected",
+    "contract_state": "C2 active",
+    "working_mode": "auditor",
+    "details": {
+      "recommended_tier": "macro",
+      "reasoning_confidence": 0.92,
+      "reasoning_rationale": "P(feasible)=0% indicates a complete infeasibility, not a marginal shortfall. FatigueIndex is violated with 100% probability while Noise is at 80% \u2014 these are not small, isolated violations. The 25% demand surge creates a fundamental tension: increasing robot speeds to meet demand would worsen an already fully-violated FatigueIndex, while reducing speeds to relieve fatigue would fail demand targets even more severely. MICRO parameter tweaks cannot resolve this contradiction, and prior learning shows S2-class solutions (MESO-level policy switches) were rejected in both analogous prior episodes, while S3-class solutions (MACRO full replans) were accepted in both cases. This consistent prior signal, combined with the severity and breadth of violations, makes MACRO the only realistic recovery path.",
+      "reasoning_key_insight": "A 25% demand surge combined with a 100% FatigueIndex violation creates a structurally irreconcilable conflict \u2014 speed increases worsen fatigue, speed decreases worsen demand shortfall \u2014 that no parameter retune or policy family switch can escape; only a full L1-L2 replan that can restructure shift allocation, add capacity buffers, or reschedule workload distribution can resolve this simultaneously. Prior experience confirms this: S3 (MACRO) succeeded twice, S2 (MESO) failed twice in identical conditions.",
+      "reasoning_llm_used": true,
+      "experience_synthesis": {
+        "pattern": "demand_surge consistently requires shifting away from S2 due to deterministic ergonomic and noise violations; S3 reliably satisfies constraints and delivers stable throughput around 42 UPH with deadline gap in the 29-33% range",
+        "successful": [
+          "S3"
+        ],
+        "failed": [
+          "S2"
+        ],
+        "insight": "S2 is deterministically infeasible for demand_surge events \u2014 both Fatigue > 0.4 and Noise > 80dB violations are reported as deterministic, meaning no parameter tuning will rescue S2 under this disturbance type. S3 is the only confirmed viable policy and shows remarkable metric stability across both trials (throughput variance < 0.1 UPH, deadline gap variance ~2.7 pp), suggesting the outcome is robust rather than lucky. However, the deadline gap remaining above 29% indicates S3 satisfies constraints but does not fully close the demand gap \u2014 future planner iterations may benefit from exploring whether S3 can be augmented (e.g., overtime, buffer pooling) to reduce deadline gap below 20%. Confidence is moderate given n=2; the deterministic rejection of S2 warrants high confidence on that specific failure, but the success range for S3 metrics should be treated as a preliminary benchmark pending more samples.",
+        "confidence": 0.62
+      }
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.678104",
+    "layer": "L2",
+    "action": "pareto_frontier_computed",
+    "contract_state": "C2 active",
+    "working_mode": "auditor",
+    "details": {
+      "canonical": "S3",
+      "num_candidates": 10,
+      "non_dominated": [
+        "S3opt_det"
+      ],
+      "dominated": [
+        "S3-Balanced-A",
+        "S3-Balanced-B",
+        "S3-Conservative-C",
+        "S3-EfficiencyLean-D",
+        "S3a_det",
+        "S3b_det",
+        "S3c_det",
+        "S3d_det",
+        "S3e_det"
+      ],
+      "selected": "S3opt_det",
+      "rationale": "Selected 'S3opt_det' from the non-dominated front (1 of 10 candidates) as the feasible candidate with the highest V/R score (0.451) and constraint margin (0.0555).",
+      "scores": {
+        "S3-Balanced-A": {
+          "vr_score": 0.366,
+          "constraint_margin": -0.3,
+          "feasible": 0.0
+        },
+        "S3-Balanced-B": {
+          "vr_score": 0.37,
+          "constraint_margin": -0.9,
+          "feasible": 0.0
+        },
+        "S3-Conservative-C": {
+          "vr_score": 0.356,
+          "constraint_margin": 0.0272,
+          "feasible": 1.0
+        },
+        "S3-EfficiencyLean-D": {
+          "vr_score": 0.376,
+          "constraint_margin": -0.5,
+          "feasible": 0.0
+        },
+        "S3a_det": {
+          "vr_score": 0.444,
+          "constraint_margin": 0.0029,
+          "feasible": 1.0
+        },
+        "S3b_det": {
+          "vr_score": 0.441,
+          "constraint_margin": 0.0045,
+          "feasible": 1.0
+        },
+        "S3c_det": {
+          "vr_score": 0.428,
+          "constraint_margin": 0.0045,
+          "feasible": 1.0
+        },
+        "S3d_det": {
+          "vr_score": 0.432,
+          "constraint_margin": 0.0252,
+          "feasible": 1.0
+        },
+        "S3e_det": {
+          "vr_score": 0.444,
+          "constraint_margin": 0.0045,
+          "feasible": 1.0
+        },
+        "S3opt_det": {
+          "vr_score": 0.451,
+          "constraint_margin": 0.0555,
+          "feasible": 1.0
+        }
+      },
+      "candidate_sources": {
+        "S3-Balanced-A": "llm",
+        "S3-Balanced-B": "llm",
+        "S3-Conservative-C": "llm",
+        "S3-EfficiencyLean-D": "llm",
+        "S3a_det": "deterministic",
+        "S3b_det": "deterministic",
+        "S3c_det": "deterministic",
+        "S3d_det": "deterministic",
+        "S3e_det": "deterministic",
+        "S3opt_det": "deterministic"
+      },
+      "selected_source": "deterministic",
+      "gate_no_feasible_candidate": false,
+      "gate_certified": true,
+      "gate_p_feasible": 1.0,
+      "gate_tried": [
+        [
+          "S3opt_det",
+          1.0
+        ]
+      ]
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.679627",
+    "layer": "L2",
+    "action": "balanced_schedule_generated",
+    "contract_state": "C2 verified",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S3",
+      "vr_score": 0.451
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.680767",
+    "layer": "L3",
+    "action": "verification_passed",
+    "contract_state": "C2 verified",
+    "working_mode": "auditor",
+    "details": {
+      "feasible": true,
+      "p_feasible": 1.0,
+      "constraint_violation_probabilities": {
+        "FatigueIndex": 0.0,
+        "Noise": 0.0
+      },
+      "worst_case_margins": {
+        "FatigueIndex": 0.0213,
+        "Noise": 2.0
+      },
+      "stochastic_n_samples": 200
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.680814",
+    "layer": "L5",
+    "action": "adaptation_applied",
+    "contract_state": "C2 verified",
+    "working_mode": "auditor",
+    "details": {
+      "adaptations": [
+        {
+          "level": "meso",
+          "desc": "Switch from high-speed policy family to robust policy family"
+        },
+        {
+          "level": "micro",
+          "desc": "Retune robot velocity and buffer timing parameters"
+        }
+      ]
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.680823",
+    "layer": "L4",
+    "action": "schedule_deployed",
+    "contract_state": "C2 verified",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S3"
+    }
+  },
+  {
+    "phase": 5,
+    "timestamp": "2026-09-07T11:36:17.681971",
+    "layer": "L4 (Integrated)",
+    "action": "integrated_execution",
+    "contract_state": "active",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S3",
+      "units_produced": 333,
+      "throughput_uph": 41.6,
+      "defect_rate": 0.0079,
+      "fatigue_index": 0.3445,
+      "noise_db": 77.6,
+      "energy_kwh": 398.0,
+      "demand_met": false,
+      "guard_events_count": 2,
+      "bridges": {
+        "isaac_sim": false,
+        "basyx_aas": false,
+        "opcua": false
+      }
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.682216",
+    "layer": "L4 (Monitor)",
+    "action": "second_disturbance_detected",
+    "contract_state": "C2 active",
+    "working_mode": "auditor",
+    "details": {
+      "disturbance": "R1 mechanical wear",
+      "r1_max_speed_before": 1.5,
+      "r1_max_speed_after": 0.75,
+      "degradation_fraction": 0.5
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.682252",
+    "layer": "L4 (Monitor)",
+    "action": "assumption_violated",
+    "contract_state": "C2 active; R1 degraded",
+    "working_mode": "auditor",
+    "details": {
+      "assumption": "r1_max_speed_mps",
+      "expected": 1.5,
+      "observed": 0.75,
+      "drift_pct": -50.0
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.683560",
+    "layer": "L5",
+    "action": "micro_adaptation_attempted",
+    "contract_state": "C2 active; R1 degraded",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S3_micro",
+      "p_feasible": 0.0,
+      "feasible": false,
+      "sufficient": false
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.684784",
+    "layer": "L5",
+    "action": "meso_adaptation_attempted",
+    "contract_state": "C2 active; R1 degraded",
+    "working_mode": "auditor",
+    "details": {
+      "schedule": "S3_meso",
+      "p_feasible": 0.0,
+      "feasible": false,
+      "sufficient": false
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.684801",
+    "layer": "L5",
+    "action": "macro_adaptation_triggered",
+    "contract_state": "C2 active; R1 degraded",
+    "working_mode": "auditor",
+    "details": {
+      "best_p_feasible": 0.0,
+      "threshold": 0.9,
+      "description": "Full replan from L1-L2 required: Best p_feasible after micro/meso = 0.00%, below threshold 90%; R1 degraded to 50% of nominal"
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:17.684818",
+    "layer": "Meta (Governance)",
+    "action": "mode_transition",
+    "contract_state": "working_mode=legislator",
+    "working_mode": "legislator",
+    "details": {
+      "from_mode": "auditor",
+      "to_mode": "legislator",
+      "trigger": "Macro-adaptation: micro/meso insufficient under R1 degradation",
+      "transition_phase": "5->6"
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:37.356526",
+    "layer": "L1",
+    "action": "contract_re_elicited",
+    "contract_state": "C3 (macro replan)",
+    "working_mode": "legislator",
+    "details": {
+      "r1_degraded_max": 0.75
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:37.356571",
+    "layer": "L2",
+    "action": "replanned_schedule_generated",
+    "contract_state": "C3 (macro replan)",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S4",
+      "vr_score": 0.358
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:37.357998",
+    "layer": "L3",
+    "action": "replanned_verification",
+    "contract_state": "C3 (macro replan)",
+    "working_mode": "legislator",
+    "details": {
+      "feasible": true,
+      "p_feasible": 1.0,
+      "certified": true
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:37.358008",
+    "layer": "L4",
+    "action": "schedule_deployed",
+    "contract_state": "C3 (macro replan)",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S4"
+    }
+  },
+  {
+    "phase": 6,
+    "timestamp": "2026-09-07T11:36:37.359078",
+    "layer": "L4 (Integrated)",
+    "action": "integrated_execution",
+    "contract_state": "active",
+    "working_mode": "legislator",
+    "details": {
+      "schedule": "S4",
+      "units_produced": 200,
+      "throughput_uph": 25.1,
+      "defect_rate": 0.0073,
+      "fatigue_index": 0.3225,
+      "noise_db": 76.1,
+      "energy_kwh": 409.0,
+      "demand_met": false,
+      "guard_events_count": 2,
+      "bridges": {
+        "isaac_sim": false,
+        "basyx_aas": false,
+        "opcua": false
+      }
+    }
+  }
+]

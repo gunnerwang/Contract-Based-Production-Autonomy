@@ -1,0 +1,132 @@
+# Eclipse BaSyx + OPC-UA infrastructure for CBPA integration
+#
+# Usage:
+#   cd cbpa-case-study/docker
+#   docker compose up -d
+#
+# This starts:
+#   - BaSyx AAS Discovery (port 9084)
+#   - BaSyx AAS Registry (port 9082)
+#   - BaSyx AAS Server (port 9081)
+#   - BaSyx Submodel Registry (port 9083)
+#   - BaSyx AAS Web UI (port 3000)
+#   - MongoDB for BaSyx persistence
+#
+# Ports 9081-9084 match the BaSyx GUI default expectations.
+#
+# The CBPA app connects via:
+#   BaSyx registry:  http://localhost:9082
+#   BaSyx AAS server: http://localhost:9081
+#   OPC-UA endpoint: opc.tcp://localhost:4840/cbpa/
+#   Isaac Sim:       http://localhost:8211 (run Isaac Sim separately)
+
+services:
+  # ── MongoDB (BaSyx persistence) ─────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: cbpa-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: basyx
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── BaSyx AAS Discovery ─────────────────────────────────────────
+  aas-discovery:
+    image: eclipsebasyx/aas-discovery:2.0.0-SNAPSHOT
+    container_name: cbpa-aas-discovery
+    restart: unless-stopped
+    ports:
+      - "9084:8081"
+    environment:
+      SPRING_DATA_MONGODB_HOST: mongo
+      SPRING_DATA_MONGODB_DATABASE: basyx
+      SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE: admin
+      BASYX_CORS_ALLOWED_ORIGINS: "*"
+      BASYX_CORS_ALLOWED_METHODS: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── BaSyx AAS Registry ──────────────────────────────────────────
+  aas-registry:
+    image: eclipsebasyx/aas-registry-log-mongodb:2.0.0-SNAPSHOT
+    container_name: cbpa-aas-registry
+    restart: unless-stopped
+    ports:
+      - "9082:8080"
+    environment:
+      SPRING_DATA_MONGODB_HOST: mongo
+      SPRING_DATA_MONGODB_DATABASE: basyx
+      SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE: admin
+      BASYX_CORS_ALLOWED_ORIGINS: "*"
+      BASYX_CORS_ALLOWED_METHODS: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── BaSyx AAS Server ────────────────────────────────────────────
+  aas-server:
+    image: eclipsebasyx/aas-environment:2.0.0-SNAPSHOT
+    container_name: cbpa-aas-server
+    restart: unless-stopped
+    ports:
+      - "9081:8081"
+    environment:
+      BASYX_AASREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://aas-registry:8080
+      BASYX_SUBMODELREPOSITORY_FEATURE_REGISTRYINTEGRATION: http://sm-registry:8080
+      BASYX_EXTERNALURL: http://localhost:9081
+      SPRING_DATA_MONGODB_HOST: mongo
+      SPRING_DATA_MONGODB_DATABASE: basyx
+      SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE: admin
+      BASYX_CORS_ALLOWED_ORIGINS: "*"
+      BASYX_CORS_ALLOWED_METHODS: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    depends_on:
+      mongo:
+        condition: service_healthy
+      aas-registry:
+        condition: service_started
+      sm-registry:
+        condition: service_started
+
+  # ── BaSyx Submodel Registry ─────────────────────────────────────
+  sm-registry:
+    image: eclipsebasyx/submodel-registry-log-mongodb:2.0.0-SNAPSHOT
+    container_name: cbpa-sm-registry
+    restart: unless-stopped
+    ports:
+      - "9083:8080"
+    environment:
+      SPRING_DATA_MONGODB_HOST: mongo
+      SPRING_DATA_MONGODB_DATABASE: basyx
+      SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE: admin
+      BASYX_CORS_ALLOWED_ORIGINS: "*"
+      BASYX_CORS_ALLOWED_METHODS: GET,POST,PUT,DELETE,PATCH,OPTIONS
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── BaSyx AAS Web UI ────────────────────────────────────────────
+  aas-web-ui:
+    image: eclipsebasyx/aas-gui:SNAPSHOT
+    container_name: cbpa-aas-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      AAS_REGISTRY_PATH: http://localhost:9082
+      SUBMODEL_REGISTRY_PATH: http://localhost:9083
+      AAS_REPO_PATH: http://localhost:9081
+      SM_REPO_PATH: http://localhost:9081
+      AAS_DISCOVERY_PATH: http://localhost:9084
+    depends_on:
+      - aas-server
+
+volumes:
+  mongo_data:
+    driver: local
