@@ -647,9 +647,7 @@ class FactoryExperiment(CBPALifecycle):
                 FACTORY_MANAGER_INTENT, "C1_factory"
             )
         except Exception as exc:
-            logger.warning("Factory elicit failed: %s; using make_c1_factory()", exc)
-            c1 = make_c1_factory()
-            ambiguity_log = []
+            self._block_deployment(1, "intent_clarification", f"Clarification failed: {exc}")
 
         # Enforce mandatory human-wellbeing hard constraints from make_c1_factory().
         # The LLM may propose looser limits; we never allow them to exceed the safety floors.

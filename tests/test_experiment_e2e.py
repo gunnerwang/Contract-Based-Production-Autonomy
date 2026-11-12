@@ -1,6 +1,9 @@
 """Lifecycle regression: preserve diagnostic metrics and refuse uncertified S3."""
 
 import pytest
+
+# Exercise downstream behavior under the explicitly confirmed no-hard-energy-cap condition.
+pytestmark = pytest.mark.usefixtures("explicit_no_energy_cap")
 from cbpa.config.defaults import TABLE3_TARGETS
 from cbpa.runner.experiment import CBPAExperiment
 from cbpa.runner.lifecycle import DeploymentBlocked

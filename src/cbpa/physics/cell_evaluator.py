@@ -8,6 +8,7 @@ Operates in two modes:
 from __future__ import annotations
 
 import numpy as np
+import math
 
 from cbpa.config.defaults import TABLE3_TARGETS
 from cbpa.config.scenario import CellConfig
@@ -30,7 +31,11 @@ class CellEvaluator:
         self,
         cell: CellConfig | None = None,
         mode: str = "deterministic",
+        r1_speed_cap: float = 1.0,
     ):
+        if not math.isfinite(r1_speed_cap) or not 0.01 <= r1_speed_cap <= 1.0:
+            raise ValueError("R1 speed cap must be in [0.01, 1]")
+        self.r1_speed_cap = r1_speed_cap
         self.cell = cell or CellConfig()
         self.mode = mode
         self.fatigue_model = FatigueModel()
@@ -39,6 +44,8 @@ class CellEvaluator:
         self.defect_model = DefectModel()
 
     def evaluate(self, schedule: Schedule) -> SimulationMetrics:
+        if schedule.r1_speed_fraction > self.r1_speed_cap:
+            raise ValueError("Schedule exceeds the R1 operating envelope")
         # Resolve variant "a" names (e.g. "S1a") to the canonical name for
         # deterministic Table-3 lookup; their parameters are identical.
         lookup_name = _VARIANT_A_MAP.get(schedule.name, schedule.name)
@@ -152,6 +159,8 @@ class CellEvaluator:
         It always uses the analytical sub-models (regardless of self.mode)
         so that the perturbations affect the physics computations.
         """
+        if schedule.r1_speed_fraction > self.r1_speed_cap:
+            raise ValueError("Schedule exceeds the R1 operating envelope")
         rng = np.random.default_rng(seed)
 
         # Nominal parameter values
@@ -173,7 +182,7 @@ class CellEvaluator:
         r2_ct_mult = 1.0 + rng.normal(0.0, 0.03 / 3, size=n_samples)
 
         # Perturbed speed fractions, clipped to valid ranges
-        r1_samples = np.clip(r1_nom + r1_delta, 0.01, 1.0)
+        r1_samples = np.clip(r1_nom + r1_delta, 0.01, self.r1_speed_cap)
         r2_samples = np.clip(r2_nom + r2_delta, 0.01, 1.0)
         hr_samples = np.clip(hr_nom + hr_delta, 0.5, 2.0)
 

@@ -18,12 +18,13 @@ each paper table and figure to the command that produces it, see the [README](..
 pip install -e ".[dev,export,figures]"
 
 # --- Single-cell case (1 or 3 shifts) ---
-# Deterministic baseline (no API key needed).  Ends at phase 5, where no
-# deterministic anchor certifies S3 and the firewall holds the deployment;
-# this is the no-LLM result reported in Table 9.
+# Deterministic run (no API key needed). The current runner stops it at phase 1:
+# the legacy scripted 3 kWh energy cap is infeasible (Supplementary Material S12).
+# Release e21619c ends it at phase 5, the no-LLM result in Table 6(a).
 python scripts/run_experiment.py --no-llm --shifts 3
 
-# LLM-empowered (requires Claude CLI auth)
+# LLM-empowered (requires Claude CLI auth). Unconfirmed clarification questions
+# stop it at phase 1; the command line supplies no reviewer (see README).
 claude login            # one-time setup
 python scripts/run_experiment.py --shifts 3
 
@@ -33,7 +34,7 @@ python scripts/run_experiment.py --integrated --shifts 3
 # --- Factory case (six-phase lifecycle) ---
 python scripts/run_factory_experiment.py --integrated
 
-# --- LLM vs no-LLM ablation (writes the baseline used in Table 9) ---
+# --- LLM vs no-LLM ablation (the Table 6(a) baselines predate the phase-1 checks above) ---
 python scripts/run_experiment.py --no-llm --integrated --shifts 3 \
     --output-dir data/results_nollm_integrated_3shifts
 python scripts/run_factory_experiment.py --no-llm --integrated \
@@ -87,59 +88,60 @@ the OpenAI path uses `temperature=0.2`.
 
 ## Extended Experiments
 
-Additional analyses reported in Sections 5.4-5.7; none of them needs a running Isaac Sim / BaSyx / OPC-UA stack.
+Additional analyses reported in Sections 5.2–5.6; none of them needs a running Isaac Sim / BaSyx / OPC-UA stack.
 
 ```bash
-# Sensitivity of certification to twin mismatch and sensor noise (Section 5.7)
+# Sensitivity of certification to twin mismatch and sensor noise (Section 5.6, Table 9)
 python scripts/sensitivity_analysis.py                     # -> data/sensitivity/
 
-# Layer-2 baseline: constrained optimiser vs hybrid planner vs anchors (Section 5.5)
+# Layer-2 baseline: constrained optimiser vs hybrid planner vs anchors (Section 5.3.2, Table 6(b))
 python scripts/planner_baselines.py                        # -> data/baselines/planner/
 
-# Layer-1 baselines on the 30-intent contract-fidelity benchmark (Section 5.5)
+# Layer-1 baselines on the 30-intent contract-fidelity benchmark (Section 5.4, Table 7)
 python scripts/contract_fidelity_benchmark.py              # template + rule/ontology (no LLM)
 python scripts/contract_fidelity_benchmark.py --llm        # + CBPA LLM elicitor (60 calls)
 
-# Cross-model check (Section 5.6): Gemini 3.8 Flash via the OpenAI-compatible endpoint
+# Cross-model check (Section 5.5, Table 8(b)): Gemini 3.8 Flash via the OpenAI-compatible endpoint
 #   export OPENAI_API_KEY=<gemini key> OPENAI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
 python scripts/run_repeated.py --case factory --runs 10 --provider openai --model gemini-3.8-flash \
     --output-root data/repeated/factory_gemini-3.8-flash_analytical_v2
 
-# Longer-horizon learning test (Section 5.6): 3 runs x 10 shifts (about 55 min per run with Claude)
+# Longer-horizon learning test (Section 5.5, Supplementary Material S4): 3 runs x 10 shifts (about 55 min per run with Claude)
 python scripts/run_repeated.py --case single --full-demo --shifts 10 --integrated --runs 3 \
     --output-root data/repeated/single_10shifts_claude-sonnet-4-6_integrated_v2
 
-# H2 LLM-only condition (Section 5.5, Table 9): anchors withheld, LLM candidates only
+# H2 LLM-only condition (Section 5.3, Table 6(a)): anchors withheld, LLM candidates only
 python scripts/run_repeated.py --case factory --runs 10 --llm-only --output-root data/repeated/factory_claude-sonnet-4-6_llmonly_analytical
 python scripts/run_repeated.py --case single --full-demo --shifts 3 --integrated --runs 10 --llm-only \
     --output-root data/repeated/single_full_claude-sonnet-4-6_llmonly_integrated
 
-# Optimiser as an anchor generator (Section 5.5, Table 10): certified optimiser schedule added to the pools
+# Optimiser as an anchor generator (Section 5.3.2, Table 6(b)): certified optimiser schedule added to the pools
 python scripts/run_repeated.py --case factory --runs 10 --optimiser-anchor --output-root data/repeated/factory_claude-sonnet-4-6_optanchor_analytical
 python scripts/run_repeated.py --case single --full-demo --shifts 3 --integrated --runs 10 --optimiser-anchor \
     --output-root data/repeated/single_full_claude-sonnet-4-6_optanchor_integrated
 
-# H3 control (Section 5.4): the next-shift schedule and anchor pool evaluated under the unrevised contract
+# H3 control (Section 5.2): the next-shift schedule and anchor pool evaluated under the unrevised contract
 python scripts/h3_control.py --factory-root data/repeated/factory_claude-sonnet-4-6_analytical_v3
 
-# Structural-decision probe (Section 5.5): does the LLM reassign/reroute unaided?
+# Structural-decision probe (Section 5.2): does the LLM reassign/reroute unaided?
 python scripts/structural_probe.py --provider claude --calls 5
 python scripts/structural_probe.py --provider openai --model gemini-3.8-flash --calls 5
 
-# Additional disturbance scenarios (Section 5.6)
+# Additional disturbance scenarios (Section 5.5, Table 8(b))
 python scripts/run_repeated.py --case factory --runs 5 --supply-delay --output-root data/repeated/factory_supplydelay_claude-sonnet-4-6_analytical_v2
 python scripts/run_repeated.py --case factory --runs 5 --supply-delay --no-operator-absence --output-root data/repeated/factory_supplydelay_only_claude-sonnet-4-6_analytical_v2
 
-# Paper values, Figure 5 data, Layer-2 baseline (Table 10) and sensitivity (Table 15) from the batch medoid runs
+# Paper values, Figure 4 data, Layer-2 baseline (Table 6(b)) and sensitivity (Table 9) from the batch medoid runs
 S5=data/repeated/single_full_claude-sonnet-4-6_integrated_v5; F3=data/repeated/factory_claude-sonnet-4-6_analytical_v3
 python scripts/paper_values.py $S5 --export-stochastic $S5/run_01/stochastic_verification.json
 python scripts/paper_values.py $F3
 python scripts/planner_baselines.py data/baselines/planner --single-root $S5 --factory-root $F3 \
     --single-nollm-root data/repeated/single_full_nollm_integrated --factory-nollm-root data/repeated/factory_nollm_analytical
 python scripts/sensitivity_analysis.py data/sensitivity --single-root $S5 --factory-root $F3 --single-nollm-root data/repeated/single_full_nollm_integrated
-python scripts/visualize_results.py --data-dir $S5/run_01            # Figures 5 and 6
-python scripts/visualize_factory_results.py --data-dir $F3/run_08     # Figure 7 (operator fatigue)
-python scripts/generate_integrated_figure.py --data $S5/run_01 --factory-data $F3/run_08  # Figure 4
+python scripts/visualize_results.py --data-dir $S5/run_01            # per-run Figure 4 and Supplementary Figure S8
+python scripts/visualize_factory_results.py --data-dir $F3/run_08     # per-run Figure 5 (operator fatigue)
+python scripts/generate_integrated_figure.py --data $S5/run_01 --factory-data $F3/run_08 --out /tmp/cbpa-stack  # per-run Figure 3
+python scripts/render_paper_figures.py /tmp/cbpa-figures            # the published data-derived figures
 
 # Batches reported in the paper (all produced after the last prototype fix; earlier batches are archived alongside):
 #   single-cell  : single_full_claude-sonnet-4-6_integrated_v5 (n=10, medoid run_01), single_10shifts_..._v2 (n=3)
@@ -164,6 +166,12 @@ src/cbpa/
     elicitation_agent.py            - LLM-assisted intent → contract translation
                                       with propose-and-refine ambiguity resolution
     contract_validator.py           - Schema and ontology validation
+    clarification.py                - Typed clarification answers, applied only after
+                                      explicit confirmation (never relaxes an obligation)
+    reconciliation.py               - LLM/rule hard-constraint disagreement gate
+                                      (reconcile_for_review)
+    draft_review.py                 - Explicit review of uncommitted contract drafts
+                                      (DraftReviewRequest, DraftDecision, ReviewInbox)
 
   layer2_planning/                # L2: Blend-and-verify planning
     plan_generator.py               - Single-cell PlanGenerator (LLM + deterministic
@@ -205,6 +213,8 @@ src/cbpa/
                                       field for LLM/deterministic provenance)
     metrics.py                      - SimulationMetrics, FactoryMetrics, ParetoFrontResult
                                       (with candidate_sources mapping)
+    units.py                        - Compilation of supported units to the plant ontology,
+                                      with conversion traces; unknown units are errors
 
   physics/                        # Domain physics models
     cell_evaluator.py               - Single-cell throughput / fatigue / noise / energy
@@ -310,7 +320,7 @@ When invoked with `--integrated`, Layer 4 deploys schedules through real industr
 | OPC-UA server | `opc.tcp://localhost:4840/cbpa/` | Live KPI / constraint / contract status to PLC/SCADA clients |
 | Streamlit dashboard | `http://localhost:8519` | Real-time monitoring (`--with-dashboard`) |
 
-CBPA treats each bridge as a black-box runtime service: it sets operating points and reads back execution evidence. The factory lifecycle uses analytical execution when the services are absent, so it runs in integrated mode either way. Single-cell integrated runs read their KPI observations from the bridges; start the stack with `bash scripts/launch_integrated.sh` before running them. The OPC-UA bridge auto-cleans stale port-4840 processes on start-up and registers an `atexit` shutdown hook to release the port cleanly.
+CBPA treats each bridge as a black-box runtime service: it sets operating points and reads back execution evidence. The factory lifecycle uses analytical execution when the services are absent, so it runs in integrated mode either way. In the single cell, a bridge whose service is unavailable runs in stub mode and execution uses the analytical physics models; all archived `*_integrated` runs had Isaac Sim and BaSyx in stub mode. Start the stack with `bash scripts/launch_integrated.sh` to read observations from the bridges. The OPC-UA bridge auto-cleans stale port-4840 processes on start-up and registers an `atexit` shutdown hook to release the port cleanly.
 
 Use `bash scripts/launch_integrated.sh` to start the Docker-based BaSyx + Isaac Sim infrastructure before running the experiment.
 
@@ -323,11 +333,11 @@ Each experiment writes a complete bundle to `data/results_*/`:
 | `audit_trail.json` | Every layer invocation tagged with phase, working mode, and details |
 | `execution_trace.json` | Phase-level summary mapped to active layers and contract state |
 | `working_modes.json` | Working-mode lifecycle and transitions |
-| `table3.json` / `factory_table.json` | Schedule metrics per phase (paper Tables 6 / 7; legacy `table3` naming) |
+| `table3.json` / `factory_table.json` | Schedule metrics per phase (paper Tables 5(a) / 5(b); legacy `table3` naming) |
 | `multi_shift_learning_curve.json` | V/R, violations, experience records per shift |
-| **`llm_contribution.json`** | **Per-phase LLM vs deterministic provenance breakdown. In a multi-shift run this file describes the last shift; use `scripts/paper_values.py --shift N` for a specific shift (paper Table 8 reports shift 1)** |
+| **`llm_contribution.json`** | **Per-phase LLM vs deterministic provenance breakdown. In a multi-shift run this file describes the last shift; use `scripts/paper_values.py --shift N` for a specific shift (paper Table 5(c) reports shift 1)** |
 | `live_demo.json` | Phase-by-phase live log consumed by the dashboard |
-| `figures/` | PDF and PNG versions of the paper figures |
+| `figures/` | PDF and PNG per-run figures (the published versions come from `scripts/render_paper_figures.py`) |
 
 ## Configuration
 
@@ -382,14 +392,33 @@ Both providers expose the same `query_text` / `query_structured` interface, so t
 | `scripts/replay_deployment_boundary.py` | Replay archived L3 decisions through the corrected runner boundary |
 | `scripts/validate_corrected_lifecycles.py` | Controlled no-LLM lifecycle validation, independent of the historical batches |
 
+**Validation follow-up studies** (Supplementary Material S12–S18; their records are in the source and
+data archive supplied with the article and are expected under `data/validation/`)
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/semantic_followup.py` | Frozen offline semantic-to-planning diagnostic on 18 authored intents |
+| `scripts/validate_clarification_lifecycles.py` | Offline lifecycles with confirmed clarification answers |
+| `scripts/semantic_model_followup.py` | Model arm on the frozen diagnostic intents; raw outputs and failures retained |
+| `scripts/semantic_lifecycle_followup.py` | Six-phase continuations from frozen parser outputs, no new model calls |
+| `scripts/semantic_lifecycle_v2.py` | Versioned six-phase continuations with contract-specific phase-6 search |
+| `scripts/semantic_repeats_v2.py` | Two further fixed-prompt generations per intent |
+| `scripts/semantic_transfer.py` | Frozen-prompt transfer to 24 new authored intents |
+| `scripts/capacity_target_audit.py` | Nominal capacity bound and counterfactual maintenance envelopes |
+| `scripts/unit_compilation_followup.py` | Replay of the archived outputs through the unit compiler, no model calls |
+| `scripts/parser_review_followup.py` | Replay of the hard-constraint review gate, no manager answers or model calls |
+| `scripts/learning_control_followup.py` | Matched offline feedback ablation (ten paired ten-shift sequences) |
+| `scripts/audit_learning_control.py` | Integrity and verification-work audit of the feedback study |
+| `scripts/validate_draft_review_workflow.py` | Scripted draft-review workflow diagnostic, no model calls |
+
 **Figures, export and utilities**
 
 | Script | Purpose |
 |--------|---------|
 | `scripts/visualize_results.py` | Single-cell result figures |
 | `scripts/visualize_factory_results.py` | Factory result figures |
-| `scripts/generate_integrated_figure.py` | Four-panel integrated stack figure |
-| `scripts/export_table3.py` | Run the single-cell no-LLM lifecycle and export its phase-level schedule-metrics bundle (legacy `table3` naming; ends at phase 5 like any no-LLM cell run) |
+| `scripts/generate_integrated_figure.py` | Four-panel integrated stack figure (per-run rendering) |
+| `scripts/render_paper_figures.py` | The article's data-derived figures as published, from the archived records |
 | `scripts/calibrate.py` | Calibration check: verify the physics models against their reference targets |
 | `scripts/opcua_monitor.py` | Live OPC-UA node monitor for a running experiment |
 | `scripts/isaac_scene_setup.py` | Headless Isaac Sim production-cell scene setup and verification server |
@@ -404,6 +433,9 @@ pytest tests/test_constraint_checker.py          # Verification firewall
 pytest tests/test_verification_completeness.py   # Every deployment passes L3
 pytest tests/test_deployment_boundary.py         # Fail-closed deployment boundary
 pytest tests/test_runtime_guards.py              # Guard synthesis and enforcement
+pytest tests/test_unit_compilation.py            # Unit compilation to the plant ontology
+pytest tests/test_clarification_writeback.py     # Confirmed clarification updates
+pytest tests/test_draft_review_workflow.py       # Draft review and confirmation boundary
 pytest tests/test_simulation.py                  # SimPy execution
 ```
 
@@ -437,6 +469,7 @@ Experiments* above, then `scripts/aggregate_repeated.py`.
 
 LLM-driven phases do not reproduce exactly: candidates vary between calls, full LLM responses were
 not retained for the historical batches, and historical factory sub-seeds were process-dependent.
-Re-running produces a new batch under the same protocol rather than the archived numbers. The
-deterministic paths (`--no-llm`, the anchors, the constraint checker, and Monte Carlo certification
-at a fixed seed base) do reproduce exactly.
+Re-running produces a new batch under the same protocol rather than the archived numbers. Within
+one release the deterministic paths (`--no-llm`, the anchors, the constraint checker, and Monte Carlo
+certification at a fixed seed base) are repeatable. The current runner stops the single-cell
+lifecycles at phase 1 (see README); release e21619c runs them as archived.

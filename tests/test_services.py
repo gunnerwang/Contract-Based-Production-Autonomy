@@ -6,6 +6,9 @@ import io
 
 import pytest
 
+# Exercise downstream behavior under the explicitly confirmed no-hard-energy-cap condition.
+pytestmark = pytest.mark.usefixtures("explicit_no_energy_cap")
+
 from cbpa.config.scenario import ScenarioConfig
 from cbpa.models.contract import make_c1
 from cbpa.models.escalation import ManagerDecision

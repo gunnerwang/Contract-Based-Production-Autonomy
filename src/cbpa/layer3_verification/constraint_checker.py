@@ -4,6 +4,7 @@ import math
 import operator
 import numpy as np
 from cbpa.models.contract import OutcomeContract
+from cbpa.models.units import canonical_unit_error
 from cbpa.models.metrics import FactoryMetrics, FeasibilityReport, SimulationMetrics, StochasticFeasibilityReport
 
 _OPS = {"<=": operator.le, ">=": operator.ge, "<": operator.lt, ">": operator.gt, "==": operator.eq}
@@ -63,6 +64,9 @@ class ConstraintChecker:
             ) if factory else c.name in _METRIC_MAP
             if not supported:
                 errors.append(f"{c.name}: unsupported hard constraint")
+            unit_error = canonical_unit_error(c.name, c.unit) if supported else None
+            if unit_error:
+                errors.append(unit_error)
             if c.operator not in _OPS:
                 errors.append(f"{c.name}: unsupported operator {c.operator!r}")
             if not cls._finite(c.limit):

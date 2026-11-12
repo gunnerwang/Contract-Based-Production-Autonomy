@@ -56,7 +56,7 @@ intend.
 
 Focus on:
 1. KPI objectives that lack an upper bound and could drive unsafe resource use
-   (e.g. "maximise throughput" with no energy cap may increase power by ~40%).
+   (e.g. "maximise throughput" without an energy budget). Do not invent numerical changes in energy or other KPIs.
 2. Hard constraints that directly conflict with a KPI direction under realistic
    operating conditions (e.g. fatigue ≤ 0.4 vs a cycle-rate multiplier > 1.0).
 3. Contextual gaps whose default value changes feasibility

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from cbpa.models.units import normalize_contract_units, UnitCompilationError
 from cbpa.llm.client import ClaudeClient
 from cbpa.llm.prompts import (
     ELICITATION_SYSTEM,
@@ -102,6 +103,9 @@ class ElicitationAgent:
                 tool_description="Create a formal outcome contract from manager intent",
             )
             return self._parse_llm_result(result, contract_name)
+        except UnitCompilationError:
+            # A changed default contract is not a remedy for an uncompiled unit.
+            raise
         except Exception as e:
             print(f"  [LLM FALLBACK] Elicitation: {e} -> using deterministic")
             logger.warning(f"LLM elicitation failed: {e}, falling back to deterministic")
@@ -115,6 +119,8 @@ class ElicitationAgent:
         self,
         manager_intent: str,
         contract_name: str = "C1",
+        *,
+        confirmed_answers: dict | None = None,
     ) -> tuple[OutcomeContract, list[AmbiguityFlag]]:
         """Elicit a contract, detect ambiguities, resolve them, return the
         refined contract together with the full ambiguity log.
@@ -123,9 +129,9 @@ class ElicitationAgent:
 
         1. Call :meth:`elicit` to obtain a draft contract.
         2. Call :meth:`_detect_ambiguities` to surface trade-off questions.
-        3. Resolve every flag (via LLM dialogue or pre-set deterministic
-           answers).
-        4. Embed the resolved flags into ``contract.ambiguities`` and return.
+        3. Apply supported scripted manager answers as validated patches;
+           leave all other questions unresolved.
+        4. Return the updated contract with its full resolution audit.
 
         The method is intentionally non-destructive: it never mutates the
         original draft but returns a refined copy.  :meth:`elicit` continues
@@ -156,19 +162,31 @@ class ElicitationAgent:
             refined.ambiguities = []
             return refined, []
 
-        # Step 3 — resolve flags
-        resolved_flags = self._resolve_flags(flags, draft)
-
-        # Step 4 — attach resolved flags and return
+        # A model-generated default is never a manager answer. Only the three
+        # documented cell presets have executable, confirmed patches.
+        from cbpa.layer1_outcome.clarification import ClarificationAnswer, apply_answer
         refined = draft.model_copy(deep=True)
-        refined.ambiguities = resolved_flags
-
-        logger.info(
-            "Refinement loop: all %d flag(s) resolved for '%s'.",
-            len(resolved_flags),
-            contract_name,
-        )
-        return refined, resolved_flags
+        refined.ambiguities = [f.model_copy(deep=True) for f in flags]
+        presets = {
+            "energy_kwh_cap": {"constraints": [{"name": "Energy", "operator": "<=", "limit": 3.0, "unit": "kWh"}]},
+            "shift_hours_overflow": {"context": {"overtime_allowed": False}},
+            "fatigue_constraint_hardness": {"constraints": [{"name": "FatigueIndex", "operator": "<=", "limit": 0.4}]},
+        }
+        if confirmed_answers is not None:
+            for field, answer in confirmed_answers.items():
+                answer = ClarificationAnswer.model_validate(answer)
+                refined = apply_answer(refined, field, answer, confirmed=True,
+                                       factory="factory" in contract_name.lower())
+            return refined, refined.ambiguities
+        answers = self._resolve_flags(flags, draft)
+        if not self.use_llm and "factory" not in contract_name.lower():
+            for flag in answers:
+                if flag.field not in presets:
+                    continue
+                answer = ClarificationAnswer(text=flag.resolution, patch=presets[flag.field])
+                refined = apply_answer(refined, flag.field, answer, confirmed=True)
+                next(f for f in refined.ambiguities if f.field == flag.field).resolution_source = "scripted_manager_patch"
+        return refined, refined.ambiguities
 
     def _detect_ambiguities(
         self,
@@ -183,8 +201,7 @@ class ElicitationAgent:
         described in the paper:
 
         1. **Energy cap** — a MAXIMIZE throughput KPI has no energy hard
-           constraint, so unconstrained optimisation could increase energy
-           consumption by ~40 %.
+           constraint; request a reviewed limit without inventing an energy estimate.
         2. **Shift extension** — ``shift_hours`` in the context is a single
            point value; it is ambiguous whether overtime is permissible when
            demand exceeds capacity.
@@ -201,6 +218,10 @@ class ElicitationAgent:
     ) -> list[AmbiguityFlag]:
         """Deterministic ambiguity checks for the battery-cell scenario."""
         flags: list[AmbiguityFlag] = []
+        # These questions and presets are calibrated only to the single cell;
+        # applying them to factory contracts invents unsupported obligations.
+        if "factory" in draft.name.lower():
+            return flags
 
         # --- Check 1: unbounded energy consumption ---
         # If there is a MAXIMIZE throughput KPI but no explicit energy cap
@@ -218,14 +239,15 @@ class ElicitationAgent:
                 AmbiguityFlag(
                     field="energy_kwh_cap",
                     question=(
-                        "Maximising throughput may increase energy consumption "
-                        "by ~40 % (from ~2.1 kWh to ~3.0 kWh per shift).  "
-                        "Should energy be hard-capped at 3.0 kWh, or is "
-                        "unconstrained energy use acceptable?"
+                        "No energy hard limit is specified. The legacy scripted "
+                        "answer requests 3.0 kWh per shift, below the model's "
+                        "92.75 kWh fixed energy term and therefore infeasible. "
+                        "Please specify a reviewed energy limit, or explicitly "
+                        "retain energy as a soft objective."
                     ),
                     default_resolution=(
-                        "Apply a soft energy guideline of 3.0 kWh; "
-                        "no hard constraint added unless manager confirms."
+                        "No new hard constraint is authorised without a "
+                        "confirmed manager answer."
                     ),
                 )
             )
@@ -385,10 +407,10 @@ class ElicitationAgent:
 
         resolved: list[AmbiguityFlag] = []
         for flag in flags:
-            answer = _PRESET_RESOLUTIONS.get(flag.field, flag.default_resolution)
+            answer = _PRESET_RESOLUTIONS.get(flag.field, "")
             resolved.append(
                 flag.model_copy(
-                    update={"resolution": answer, "resolved": True}
+                    update={"resolution": answer, "resolved": False}
                 )
             )
             logger.debug(
@@ -440,7 +462,7 @@ class ElicitationAgent:
                 priorities.append(lvl)
         raw_priorities = [str(p) for p in result.get("priority_order", [])]
 
-        return OutcomeContract(
+        draft = OutcomeContract(
             name=contract_name,
             kpi_targets=kpis,
             hard_constraints=constraints,
@@ -448,3 +470,7 @@ class ElicitationAgent:
             context={**(result.get("context", {}) or {}), "_raw_priority_order": raw_priorities},
             assumptions=result.get("assumptions", {}),
         )
+
+        compiled, changes = normalize_contract_units(draft)
+        compiled.context["_unit_conversions"] = changes
+        return compiled

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from cbpa.models.contract import OutcomeContract
+from cbpa.models.units import canonical_unit_error
 from cbpa.layer3_verification.constraint_checker import ConstraintChecker
 
 
@@ -29,6 +30,12 @@ class ContractValidator:
         if not contract.kpi_targets:
             result.errors.append("Contract must have at least one KPI target")
             result.is_valid = False
+
+        for kpi in contract.kpi_targets:
+            error = canonical_unit_error(kpi.name, kpi.unit)
+            if error:
+                result.errors.append(error)
+                result.is_valid = False
 
         # Must have hard constraints
         if not contract.hard_constraints:
@@ -58,7 +65,9 @@ class ContractValidator:
         # Ambiguity resolution: if any ambiguity flags are present they must
         # all be resolved before the contract is forwarded to Layer 2.
         unresolved = [
-            af for af in contract.ambiguities if not af.resolved
+            af for af in contract.ambiguities
+            if not af.resolved or af.applied_patch is None
+            or af.resolution_source not in {"confirmed_patch", "scripted_manager_patch", "confirmed_draft", "scripted_draft"}
         ]
         if unresolved:
             fields = ", ".join(af.field for af in unresolved)

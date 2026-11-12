@@ -306,13 +306,13 @@ class TestContractCanonicalisation:
             HardConstraint(name="operator_fatigue", operator="<=", limit=0.4),
             HardConstraint(name="noise_level", operator="<=", limit=80.0),
         ]})
-        out = _canonicalise_contract(c, intent="Increase output; keep fatigue below 0.35 and noise under 78 dB.")
+        out = _canonicalise_contract(c, intent="Increase output; keep fatigue below 0.35 and noise under 78 dB.", crosscheck_policy="legacy_tighten")
         names = {hc.name: hc.limit for hc in out.hard_constraints}
         assert names["FatigueIndex"] == 0.35 and names["Noise"] == 78.0
 
 
 class TestCertificationGate:
-    def test_gate_certifies_or_blocks(self):
+    def test_gate_certifies_or_blocks(self, explicit_no_energy_cap):
         import pytest
         from cbpa.runner.experiment import CBPAExperiment
         from cbpa.runner.lifecycle import DeploymentBlocked

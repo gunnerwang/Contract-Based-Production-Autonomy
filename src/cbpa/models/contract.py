@@ -95,8 +95,11 @@ class AmbiguityFlag(BaseModel):
     resolution: str = ""
     """The manager's actual answer (empty until resolved)."""
 
+    applied_patch: dict[str, Any] | None = None
+    resolution_source: str | None = None
+
     resolved: bool = False
-    """``True`` once ``resolution`` has been filled in."""
+    """True only after a confirmed patch has been applied (or explicitly retained)."""
 
 
 class KPIDirection(str, Enum):

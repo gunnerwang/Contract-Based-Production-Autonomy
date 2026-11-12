@@ -93,3 +93,23 @@ def s3_metrics():
         fatigue_index=0.38, energy_kwh=417.0, deadline_gap_pct=14.9,
         units_produced=373, shift_hours=8.0,
     )
+
+
+@pytest.fixture
+def explicit_no_energy_cap(monkeypatch):
+    """Downstream tests use a separately confirmed contract without a hard
+    energy cap. Default 3 kWh rejection is tested in test_clarification_writeback.
+    This fixture preserves actual patch application and validation.
+    """
+    from cbpa.layer1_outcome.elicitation_agent import ElicitationAgent
+    original = ElicitationAgent.elicit_with_refinement
+    def confirmed(self, intent, contract_name="C1", **kwargs):
+        if "factory" not in contract_name.lower() and "confirmed_answers" not in kwargs:
+            kwargs["confirmed_answers"] = {
+                "energy_kwh_cap": {"text": "Keep energy as a soft guideline; no new hard cap.",
+                                   "patch": {"disposition": "retain"}},
+                "shift_hours_overflow": {"text": "Keep the existing shift; no overtime.",
+                                         "patch": {"context": {"overtime_allowed": False}}},
+            }
+        return original(self, intent, contract_name, **kwargs)
+    monkeypatch.setattr(ElicitationAgent, "elicit_with_refinement", confirmed)

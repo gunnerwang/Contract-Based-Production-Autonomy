@@ -5,13 +5,13 @@ The original repeated batches are unchanged. `replay_summary.json` applies the c
 Run from the repository root:
 
 ```bash
-python scripts/replay_deployment_boundary.py
-python -m pytest tests -q --disable-warnings
+python cbpa-case-study/scripts/replay_deployment_boundary.py
+python -m pytest cbpa-case-study/tests -q --disable-warnings
 ```
 
 `test_results.txt` records 318 passing tests. Tests include whole factory lifecycles, rejected final certificates before dispatch/prestaging, cell refusal, candidate fallback to a certified alternative, probability/count checks, error-state and partial-export behavior, and cross-process sampling reproducibility. They do not validate a physical emergency stop or independent model calibration.
 
-`historical_source/` preserves the pre-correction versions of every changed implementation module (not tests). `source_versions.json` records before/after SHA-256 values. For historical-code reconstruction in a separate copy, restore these files to their corresponding paths under ``; all other implementation sources are unchanged by this correction. The historical factory RNG uses Python's randomized string hash; the seed recorded in a run is insufficient to reconstruct its cell draws unless its process hash seed is also known. Restoring code alone cannot recover that unrecorded state.
+`historical_source/` preserves the pre-correction versions of every changed implementation module (not tests). `source_versions.json` records before/after SHA-256 values. For historical-code reconstruction in a separate copy, restore these files to their corresponding paths under `cbpa-case-study/`; all other implementation sources are unchanged by this correction. The historical factory RNG uses Python's randomized string hash; the seed recorded in a run is insufficient to reconstruct its cell draws unless its process hash seed is also known. Restoring code alone cannot recover that unrecorded state.
 
 The corrected factory uses stable sorted cell indices in sub-seeds and phase-consistent certification/reporting seeds. Original performance tables remain historical results. The V/R `+1` baseline was already in the analytical scorer; the manuscript equation was corrected, without changing that scoring function.
 

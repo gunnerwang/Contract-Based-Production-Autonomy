@@ -12,6 +12,7 @@ followed by local refinement; deterministic given the seed.
 from __future__ import annotations
 
 import itertools
+import math
 import time
 from dataclasses import dataclass
 
@@ -57,10 +58,16 @@ class OptimiserPlanner:
         return self.checker.check_stochastic(contract, mc, seed=self.seed)
 
     def plan(self, contract: OutcomeContract, demand: float, name: str = "OPT",
-             grid: int = 7, refine: int = 300) -> OptimResult:
+             grid: int = 7, refine: int = 300, bounds: dict | None = None) -> OptimResult:
         t0 = time.perf_counter()
+        search_bounds = dict(BOUNDS if bounds is None else bounds)
+        if set(search_bounds) != set(BOUNDS):
+            raise ValueError("Search bounds must specify r1, r2, hr and buf")
+        for key, limits in search_bounds.items():
+            if len(limits) != 2 or not all(math.isfinite(v) for v in limits) or not 0 < limits[0] <= limits[1]:
+                raise ValueError(f"Invalid search bounds for {key}")
         rng = np.random.default_rng(self.seed)
-        axes = {k: np.linspace(lo, hi, grid) for k, (lo, hi) in BOUNDS.items()}
+        axes = {k: np.linspace(lo, hi, grid) for k, (lo, hi) in search_bounds.items()}
         best, best_s, n = -1.0, None, 0
         cand = []
         for r1, r2, hr, buf in itertools.product(axes["r1"], axes["r2"], axes["hr"], axes["buf"]):
@@ -74,10 +81,10 @@ class OptimiserPlanner:
         for v0, s0 in cand[:5]:
             for _ in range(refine // 5):
                 s = s0.model_copy(update={
-                    "r1_speed_fraction": float(np.clip(s0.r1_speed_fraction + rng.normal(0, 0.03), *BOUNDS["r1"])),
-                    "r2_speed_fraction": float(np.clip(s0.r2_speed_fraction + rng.normal(0, 0.03), *BOUNDS["r2"])),
-                    "human_cycle_rate_multiplier": float(np.clip(s0.human_cycle_rate_multiplier + rng.normal(0, 0.03), *BOUNDS["hr"])),
-                    "buffer_time_s": float(np.clip(s0.buffer_time_s + rng.normal(0, 0.3), *BOUNDS["buf"]))})
+                    "r1_speed_fraction": float(np.clip(s0.r1_speed_fraction + rng.normal(0, 0.03), *search_bounds["r1"])),
+                    "r2_speed_fraction": float(np.clip(s0.r2_speed_fraction + rng.normal(0, 0.03), *search_bounds["r2"])),
+                    "human_cycle_rate_multiplier": float(np.clip(s0.human_cycle_rate_multiplier + rng.normal(0, 0.03), *search_bounds["hr"])),
+                    "buffer_time_s": float(np.clip(s0.buffer_time_s + rng.normal(0, 0.3), *search_bounds["buf"]))})
                 ok, v = self._score(s, contract); n += 1
                 if ok:
                     cand.append((v, s))

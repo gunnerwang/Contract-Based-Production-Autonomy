@@ -27,7 +27,7 @@ def test_factory_service_retains_error_and_stops_before_later_phases():
     assert service.status.state == ExperimentState.IDLE
 
 
-def test_cell_service_uses_canonical_runtime_failure_audit():
+def test_cell_service_uses_canonical_runtime_failure_audit(explicit_no_energy_cap):
     service = ExperimentService(use_llm=False)
     p1 = service.run_phase(1)
     assert p1 is not None
@@ -40,7 +40,7 @@ def test_cell_service_uses_canonical_runtime_failure_audit():
 
 
 @pytest.mark.parametrize('phase',[5,6])
-def test_runtime_rejection_never_commits_accepted_learning(phase):
+def test_runtime_rejection_never_commits_accepted_learning(phase, explicit_no_energy_cap):
     exp = CBPAExperiment(config=ScenarioConfig(optimiser_anchor=True, enable_macro_phase=True, use_simulation=True),use_llm=False)
     prior = []
     for n in range(1,phase):
@@ -148,7 +148,7 @@ def test_integrated_execution_errors_cannot_fall_back_to_another_run(error):
 
 
 @pytest.mark.parametrize('service_type',[ExperimentService,FactoryExperimentService])
-def test_escalation_failure_persists_error_and_returns_partial_result(service_type):
+def test_escalation_failure_persists_error_and_returns_partial_result(service_type, explicit_no_energy_cap):
     service = service_type(use_llm=False)
     service._complete_phase4 = MagicMock(side_effect=DeploymentBlocked('invalid revised contract'))
     callbacks = []

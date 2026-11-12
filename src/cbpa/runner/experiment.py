@@ -12,6 +12,7 @@ Inherits from :class:`CBPALifecycle` which defines the 5-round structure:
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -40,6 +41,7 @@ from cbpa.layer4_execution.simulation import ManufacturingCell, SimulationResult
 from cbpa.physics.cell_evaluator import CellEvaluator
 from cbpa.runner.lifecycle import (
     CBPALifecycle,
+    DeploymentBlocked,
     RoundConfig,
     RoundType,
     CBPA_ROUND_SEQUENCE,
@@ -56,22 +58,24 @@ MANAGER_INTENT = (
 # Mandatory scenario floors for the single-cell contract: the plant ontology
 # owns these limits; an elicited draft may express them in its own vocabulary
 # or with looser values, but certification must always bind them.
-_SC_MANDATORY_FLOORS = {"FatigueIndex": 0.4, "Noise": 80.0}
+_SC_MANDATORY_FLOORS = {"FatigueIndex": 0.4, "Noise": 80.0, "CyberRiskLevel": 2.0}
 
 
-def _canonicalise_contract(contract, intent: str | None = None):
+def _canonicalise_contract(contract, intent: str | None = None, *, crosscheck_policy: str = "review"):
     """Bind elicited hard constraints to the plant ontology (fail-closed).
 
     Renames fatigue/noise constraints stated in the LLM's own vocabulary to
     the canonical names the verifier monitors, clamps their limits to the
     mandatory floors, and re-inserts any floor constraint the draft omitted.
-    Mirrors the factory runner's mandatory-floor patching.  When *intent* is
-    given, the LLM's limits are additionally cross-checked against a
-    rule-based parse of the same text and the tightest limit is kept, so a
-    limit the manager stated explicitly cannot be relaxed by the LLM
-    (contract-fidelity benchmark, Section 5.5 of the paper).
+    Mirrors the factory runner's mandatory-floor patching. With intent,
+    the default policy compares unit-normalized hard requirements and leaves
+    disagreements pending. Explicit legacy_tighten preserves historical scripted
+    no-LLM simulations; it is not the live LLM policy.
     """
     from cbpa.models.contract import HardConstraint
+
+    if crosscheck_policy not in {"review", "legacy_tighten"}:
+        raise ValueError("Unknown parser cross-check policy")
 
     def canon_of(name: str):
         low = name.lower()
@@ -79,6 +83,8 @@ def _canonicalise_contract(contract, intent: str | None = None):
             return "FatigueIndex"
         if "noise" in low:
             return "Noise"
+        if "cyber" in low:
+            return "CyberRiskLevel"
         return None
 
     patched = []
@@ -116,7 +122,7 @@ def _canonicalise_contract(contract, intent: str | None = None):
             patched.append(
                 HardConstraint(name=canon, operator="<=", limit=floor)
             )
-    if intent:
+    if intent and crosscheck_policy == "legacy_tighten":
         from cbpa.baselines.elicitation_baselines import RuleBasedElicitor
 
         for hc in RuleBasedElicitor().elicit(intent).hard_constraints:
@@ -129,6 +135,10 @@ def _canonicalise_contract(contract, intent: str | None = None):
     from cbpa.models.contract import make_c1, reinsert_typed_assumptions
 
     contract = contract.model_copy(update={"hard_constraints": patched})
+    if intent and crosscheck_policy == "review":
+        from cbpa.baselines.elicitation_baselines import RuleBasedElicitor
+        from cbpa.layer1_outcome.reconciliation import reconcile_for_review
+        contract = reconcile_for_review(contract, RuleBasedElicitor().elicit(intent))
     # Typed assumptions: the tracker in Layer 4 checks only typed entries, which the
     # LLM draft never carries (defect (vi) of the revision); re-insert the plant's.
     return reinsert_typed_assumptions(contract, make_c1(), logger=logger)
@@ -213,8 +223,12 @@ class CBPAExperiment(CBPALifecycle):
         use_llm: bool = False,
         llm_client: ClaudeClient | None = None,
         mc_seed_base: int = 42,
+        manager_intent: str | None = None,
+        contract_reviewer=None,
     ):
         self.config = config or ScenarioConfig()
+        self._manager_intent_override = manager_intent
+        self.contract_reviewer = contract_reviewer
 
         # Initialize shared L1-L5 + Meta layer components via base class
         super().__init__(use_llm=use_llm, llm_client=llm_client, mc_seed_base=mc_seed_base)
@@ -258,6 +272,45 @@ class CBPAExperiment(CBPALifecycle):
         if self.config.use_integrated:
             from cbpa.service.integration.orchestrator import IntegrationOrchestrator
             self._orchestrator = IntegrationOrchestrator(self.config)
+
+    @property
+    def manager_intent(self):
+        return self._manager_intent_override if self._manager_intent_override is not None else MANAGER_INTENT
+
+    def _bind_elicited_contract(self, contract, intent, phase, *, previous=None):
+        """Live LLM drafts require agreement or explicit review before planning."""
+        policy = "review" if getattr(self.elicitation, "use_llm", False) else "legacy_tighten"
+        try:
+            bound = _canonicalise_contract(contract, intent, crosscheck_policy=policy)
+        except Exception as exc:
+            self._block_deployment(phase, contract.name, f"Contract binding failed: {exc}")
+        pending = [f.field for f in bound.ambiguities if not f.resolved]
+        self.audit.record(phase=phase, layer="L1", action="parser_crosscheck",
+                          contract_state="pending review" if pending else "draft checked",
+                          policy=policy, pending_fields=pending)
+        if pending and self.contract_reviewer is not None:
+            from cbpa.layer1_outcome.draft_review import DraftReviewRequest, ReviewInbox
+            request = DraftReviewRequest(bound, intent, phase, active=previous)
+            self.audit.record(phase=phase, layer="L1", action="contract_review_pending",
+                              contract_state="uncommitted draft; execution waiting",
+                              request_id=request.request_id, digest=request.digest,
+                              pending_fields=pending)
+            try:
+                decision = self.contract_reviewer(request)
+                if decision is None:
+                    self._block_deployment(phase, contract.name, "Draft review ended without confirmation")
+                # The inbox validates a decision before releasing its waiter.
+                approved = decision if isinstance(self.contract_reviewer, ReviewInbox) else request.resolve(decision)
+            except DeploymentBlocked:
+                raise
+            except Exception as exc:
+                self._block_deployment(phase, contract.name, f"Draft review failed: {exc}")
+            self.audit.record(phase=phase, layer="L1", action="contract_review_confirmed",
+                              contract_state="reviewed draft; acceptance checks still required",
+                              review=approved.context["_draft_review"],
+                              reviewed_contract=approved.model_dump(mode="json"))
+            bound = approved
+        return bound
 
     def shutdown(self) -> None:
         """Release resources (OPC-UA server, bridges)."""
@@ -675,26 +728,19 @@ class CBPAExperiment(CBPALifecycle):
         print("\n" + "=" * 70)
         print("  PHASE 1: Intent Translation & Contract Deployment")
         print("=" * 70)
-        print(f"\n  Manager says: \"{MANAGER_INTENT}\"")
+        print(f"\n  Manager says: \"{self.manager_intent}\"")
         print(f"  Working mode: {self.governance.current_mode.value.upper()}")
         print()
 
         # L1: Elicit contract with propose-and-refine ambiguity resolution.
         try:
             c1, ambiguity_log = self.elicitation.elicit_with_refinement(
-                MANAGER_INTENT, "C1"
+                self.manager_intent, "C1"
             )
         except Exception as exc:
-            print(f"  [LLM FALLBACK] Refinement: {exc} -> using bare elicit()")
-            logger.warning(
-                "elicit_with_refinement() failed (%s); "
-                "falling back to bare elicit().",
-                exc,
-            )
-            c1 = self.elicitation.elicit(MANAGER_INTENT, "C1")
-            ambiguity_log = []
+            self._block_deployment(1, "intent_clarification", f"Clarification failed: {exc}")
 
-        c1 = _canonicalise_contract(c1, MANAGER_INTENT)
+        c1 = self._bind_elicited_contract(c1, self.manager_intent, 1)
         c1 = self._prepare_contract(c1, 1)
 
         # ── Narration: show the parsed contract ──
@@ -711,7 +757,7 @@ class CBPAExperiment(CBPALifecycle):
             phase=1, layer="L1",
             action="contract_elicited", contract_state="C1 verified",
             working_mode=self.governance.current_mode.value,
-            intent=MANAGER_INTENT,
+            intent=self.manager_intent,
         )
 
         # Audit: ambiguity resolution loop
@@ -1268,7 +1314,7 @@ class CBPAExperiment(CBPALifecycle):
 
         # The Partner decision is the legislative act: pre-authorise C2 here
         # so Phase 5 (Auditor) can implement it without invoking L1.
-        c2 = _canonicalise_contract(self.elicitation.elicit(MANAGER_INTENT, "C2"), MANAGER_INTENT)
+        c2 = self._bind_elicited_contract(self.elicitation.elicit(self.manager_intent, "C2"), self.manager_intent, 4, previous=previous_contract)
         c2 = self._prepare_contract(c2, 4, previous=previous_contract)
         print(f"  [Meta] Contract pre-authorised: C1 → {c2.name}")
 
@@ -1610,6 +1656,9 @@ class CBPAExperiment(CBPALifecycle):
                 config=shift_config,
                 use_llm=self.client is not None,
                 llm_client=self.client,
+                mc_seed_base=self.mc_seed_base,
+                manager_intent=self._manager_intent_override,
+                contract_reviewer=self.contract_reviewer,
             )
             shift_exp.learning = shared_learning
 
@@ -1700,9 +1749,9 @@ class CBPAExperiment(CBPALifecycle):
            maximum speed to a fraction of nominal.
         2. Try micro-adaptation (parameter retune of the current S3).
         3. Try meso-adaptation (policy family switch).
-        4. Both fail stochastic verification (p_feasible < threshold).
-        5. Trigger macro-adaptation: full replan from L1-L2.
-        6. The replanned S4 passes verification.
+        4. If both fail, trigger macro-adaptation from L1-L2.
+        5. Search within the degraded speed envelope when enabled.
+        6. Deploy only a candidate passing the retained contract and certificate.
         """
         logger.info("=== Phase 6: Macro-Adaptation (Second Disturbance) ===")
 
@@ -1720,7 +1769,9 @@ class CBPAExperiment(CBPALifecycle):
         c2 = p5.contract
         s3 = p5.schedule
         degradation = self.config.macro_r1_degradation_fraction
-        threshold = self.config.macro_adapt_threshold
+        if not math.isfinite(degradation) or not 0.01 <= degradation <= 1.0:
+            self._block_deployment(6, "R1 envelope", "Invalid degradation fraction")
+        threshold = max(self.config.macro_adapt_threshold, 0.95)
 
         # --- Inject second disturbance: R1 speed degradation ---
         # Mechanical wear limits R1 to a fraction of its original max speed.
@@ -1781,14 +1832,14 @@ class CBPAExperiment(CBPALifecycle):
             shift_hours=self.config.cell.shift_hours,
             demand_base_uph=self.config.cell.demand_base_uph,
         )
-        degraded_evaluator = CellEvaluator(degraded_cell, mode="analytical")
+        degraded_evaluator = CellEvaluator(degraded_cell, mode="analytical", r1_speed_cap=degradation)
 
         # --- Attempt 1: Micro-adaptation (parameter retune of S3) ---
         # To compensate for R1 degradation while maintaining throughput,
         # push R2 speed and human rate higher to make up lost capacity.
         s3_micro = s3.model_copy(update={
             "name": "S3_micro",
-            "r1_speed_fraction": min(s3.r1_speed_fraction + 0.10, 0.99),
+            "r1_speed_fraction": min(s3.r1_speed_fraction + 0.10, degradation),
             "r2_speed_fraction": min(s3.r2_speed_fraction + 0.25, 0.99),
             "human_cycle_rate_multiplier": min(
                 s3.human_cycle_rate_multiplier + 0.15, 1.5
@@ -1831,7 +1882,7 @@ class CBPAExperiment(CBPALifecycle):
         # substantially to recover throughput lost from R1 degradation.
         s3_meso = s3.model_copy(update={
             "name": "S3_meso",
-            "r1_speed_fraction": 0.99,
+            "r1_speed_fraction": degradation,
             "r2_speed_fraction": 0.99,
             "human_cycle_rate_multiplier": 1.20,
             "buffer_time_s": 1.0,
@@ -1868,8 +1919,8 @@ class CBPAExperiment(CBPALifecycle):
         )
 
         # --- Determine if macro-adaptation is needed ---
-        best_p = max(micro_stoch.p_feasible if micro_report.is_feasible else 0.0,
-                     meso_stoch.p_feasible if meso_report.is_feasible else 0.0)
+        best_p = max(micro_stoch.p_feasible if micro_report.is_feasible and not micro_stoch.evaluation_errors else 0.0,
+                     meso_stoch.p_feasible if meso_report.is_feasible and not meso_stoch.evaluation_errors else 0.0)
         needs_macro = self.adaptation.should_macro_adapt(best_p, threshold)
 
         print(f"\n  [L5] Best P(feasible) after micro/meso: {best_p:.0%} "
@@ -1911,7 +1962,7 @@ class CBPAExperiment(CBPALifecycle):
             )
 
             # --- Full replan: L1 re-elicit -> L2 generate -> L3 verify ---
-            c3 = _canonicalise_contract(self.elicitation.elicit(MANAGER_INTENT, "C3"), MANAGER_INTENT)
+            c3 = self._bind_elicited_contract(self.elicitation.elicit(self.manager_intent, "C3"), self.manager_intent, 6, previous=c2)
             c3 = self._prepare_contract(c3, 6, previous=c2)
             c3.context["r1_degraded"] = True
             c3.context["r1_effective_max_mps"] = degraded_r1_max
@@ -1937,6 +1988,38 @@ class CBPAExperiment(CBPALifecycle):
                 ),
             )
 
+            # Retain the diagnostic S4, but search the active contract when
+            # optimiser anchors are enabled. All fractions remain relative to
+            # original nominal speed; degradation is an upper command bound.
+            candidates = [s4]
+            if self.config.optimiser_anchor:
+                from cbpa.baselines.optimizer_planner import OptimiserPlanner, BOUNDS
+                bounds = dict(BOUNDS)
+                bounds["r1"] = (min(BOUNDS["r1"][0], degradation), degradation)
+                opt = OptimiserPlanner(degraded_evaluator, self.vr_scorer, self.checker,
+                    certify=True, seed=self.mc_seed_base + 3).plan(
+                        c3, s4.demand_target_uph, name="S4opt", bounds=bounds)
+                if opt.schedule is not None:
+                    candidates.append(opt.schedule)
+            accepted = []
+            diagnostics = []
+            for candidate in candidates:
+                nominal = self.checker.check(c3, degraded_evaluator.evaluate(candidate))
+                sampled = self.checker.check_stochastic(c3,
+                    degraded_evaluator.evaluate_monte_carlo(candidate, n_samples=200, seed=self.mc_seed_base + 3),
+                    seed=self.mc_seed_base + 3)
+                ok = nominal.is_feasible and not sampled.evaluation_errors and sampled.p_feasible >= 0.95
+                diagnostics.append({"schedule": candidate.name, "parameters": candidate.model_dump(mode="json"),
+                    "nominal": nominal.is_feasible, "p_feasible": sampled.p_feasible, "accepted": ok})
+                if ok:
+                    score = self.vr_scorer.compute(degraded_evaluator.evaluate(candidate), schedule_name=candidate.name).vr_score
+                    accepted.append((score, candidate))
+            self.audit.record(phase=6, layer="L2", action="macro_candidate_search",
+                contract_state="C3 retained obligations", working_mode=self.governance.current_mode.value,
+                r1_speed_cap=degradation, candidates=diagnostics)
+            if not accepted:
+                self._block_deployment(6, "S4 candidates", "No candidate certifies under the retained contract and degraded envelope")
+            s4 = max(accepted, key=lambda item: item[0])[1].model_copy(update={"name": "S4"})
             s4_metrics = degraded_evaluator.evaluate(s4)
             s4_vr = self.vr_scorer.compute(s4_metrics, schedule_name=s4.name)
 
@@ -2047,12 +2130,38 @@ class CBPAExperiment(CBPALifecycle):
                 ),
             )
 
-        # This branch has only evaluated lower-tier proposals, not applied them.
-        self._block_deployment(
-            6, "lower-tier adaptation",
-            "A lower-tier proposal passed diagnostic checks, but this branch has "
-            "no implemented certified dispatch; manager intervention required",
-        )
+        # A certified lower-tier proposal is executable under the unchanged
+        # contract. Preserve nominal/sample checks and the same runtime gate.
+        alternatives = [(s3_micro, micro_report, micro_stoch, "micro"),
+                        (s3_meso, meso_report, meso_stoch, "meso")]
+        available = [(candidate, report, stochastic, tier)
+                     for candidate, report, stochastic, tier in alternatives
+                     if report.is_feasible and not stochastic.evaluation_errors
+                     and stochastic.p_feasible >= 0.95]
+        if not available:
+            self._block_deployment(6, "lower-tier adaptation", "No lower-tier candidate certifies")
+        selected, report, stochastic, tier = available[0]
+        selected = selected.model_copy(update={"name": "S4"})
+        cert = self.cert_issuer.issue(selected.name, report, c2, stochastic_report=stochastic)
+        self._require_deployment_certificate(cert, 6)
+        self.audit.record(phase=6, layer="L4", action="schedule_deployed",
+            contract_state="C2 retained", working_mode=self.governance.current_mode.value,
+            schedule=selected.name, adaptation_tier=tier, r1_speed_cap=degradation)
+        result = self._execute_integrated(selected, phase=6, contract=c2, cell_config=degraded_cell)
+        if result is None:
+            result = self._execute_simulation(selected, phase=6, contract=c2, cell_config=degraded_cell)
+        metrics = result.metrics if result is not None else degraded_evaluator.evaluate(selected)
+        report = self.checker.check(c2, metrics)
+        if not report.is_feasible:
+            self._block_execution(6, "Lower-tier execution violated retained contract")
+        score = self.vr_scorer.compute(metrics, schedule_name=selected.name)
+        self.learning.record(disturbance_type="r1_mechanical_wear",
+            disturbance_magnitude=round((1-degradation)*100,1), rejected_policy="S3",
+            rejection_reason="R1 operating envelope changed", accepted_policy="S4",
+            adaptation_level=tier, outcome_metrics={"throughput_uph":metrics.throughput_uph,
+                                                    "p_feasible":stochastic.p_feasible})
+        return PhaseResult(phase=6, schedule=selected, metrics=metrics, vr_score=score,
+            feasibility=report, contract=c2, description=f"Certified {tier} adaptation under R1 degradation")
 
 
 def main() -> None:
